@@ -1,0 +1,102 @@
+version: "0.1"
+project: loopgen
+generatedBy: loopgen
+generatedAt: 2026-06-15T09:28:24.504Z
+loops:
+  - id: ci-failure-repair
+    title: CI failure repair
+    goal: Restore failing CI jobs for loopgen with the smallest safe code or configuration change.
+    trigger:
+      type: ci_failure
+      cadence: manual
+      sources:
+        - manual CI failure URL or log
+    contextSources:
+      - README.md
+      - package.json
+    actions:
+      - Collect the failing job name, failing command, and relevant log excerpt.
+      - Map the failure to a local verification command before editing.
+      - Create or reuse an isolated working branch/worktree before edits.
+      - Read the state file first and append a concise attempt log after every iteration.
+      - Make the smallest change that can satisfy the goal.
+      - Run verification before declaring success.
+      - Ask for human input instead of guessing when a stop criterion is met.
+    verification:
+      commands:
+        - npm run test
+        - npm run build
+      acceptanceCriteria: All configured verification commands pass and the generated state file explains what changed.
+      makerChecker: true
+      requiresHumanCommandDefinition: false
+    stopCriteria:
+      maxIterations: 3
+      timeoutMinutes: 45
+      requireHumanInputOn:
+        - verification command is missing or ambiguous
+        - changes require production credentials
+        - more than 20 files would be modified
+        - the same failure repeats after maxIterations
+    stateFile: .loopgen/state/ci-failure-repair.md
+    permissions:
+      allowedCommands: &a1
+        - npm ci
+        - npm run test
+        - npm run build
+      forbiddenPaths: &a2
+        - .env
+        - .env.*
+        - secrets/**
+        - production/**
+        - "**/*prod*secret*"
+        - "**/*credential*"
+      allowNetwork: false
+      allowPrCreation: false
+    adapters: &a3
+      - codex
+      - claude
+  - id: test-repair
+    title: Test repair
+    goal: Diagnose failing tests in loopgen, fix the underlying issue, and verify the relevant suite.
+    trigger:
+      type: test_failure
+      cadence: manual
+      sources:
+        - test output
+        - changed files
+        - related test files
+    contextSources:
+      - README.md
+      - package.json
+      - tests/**
+      - "**/*.test.*"
+      - "**/*.spec.*"
+    actions:
+      - Reproduce the failing test locally when possible.
+      - Prefer fixing source behavior over weakening assertions.
+      - Create or reuse an isolated working branch/worktree before edits.
+      - Read the state file first and append a concise attempt log after every iteration.
+      - Make the smallest change that can satisfy the goal.
+      - Run verification before declaring success.
+      - Ask for human input instead of guessing when a stop criterion is met.
+    verification:
+      commands:
+        - npm run test
+      acceptanceCriteria: All configured verification commands pass and the generated state file explains what changed.
+      makerChecker: true
+      requiresHumanCommandDefinition: false
+    stopCriteria:
+      maxIterations: 3
+      timeoutMinutes: 45
+      requireHumanInputOn:
+        - verification command is missing or ambiguous
+        - changes require production credentials
+        - more than 20 files would be modified
+        - the same failure repeats after maxIterations
+    stateFile: .loopgen/state/test-repair.md
+    permissions:
+      allowedCommands: *a1
+      forbiddenPaths: *a2
+      allowNetwork: false
+      allowPrCreation: false
+    adapters: *a3

@@ -1,0 +1,7 @@
+name = "loopgen-ci-failure-repair-checker"
+description = "Checks whether a loopgen maker iteration satisfied the goal without broad or unsafe changes."
+instructions = """
+Review the maker changes for loop ci-failure-repair.
+Confirm the diff is small, the verification commands were run, and the state file was updated.
+Reject the iteration if it touches forbidden paths, weakens tests without justification, omits verification, or exceeds the stop criteria.
+"""
