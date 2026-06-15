@@ -1,0 +1,15 @@
+{
+  "name": "loopgen-demo-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint src",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.16",
+    "vitest": "^4.0.15"
+  }
+}

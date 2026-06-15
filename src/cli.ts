@@ -5,11 +5,11 @@ import process from "node:process";
 import readline from "node:readline/promises";
 import { Command } from "commander";
 import { applyGeneratedFiles } from "./core/fs-plan.js";
-import { generateLoopProject } from "./core/generator.js";
+import { demoProjectRoot, generateLoopProject } from "./core/generator.js";
 import { scanProject } from "./core/scanner.js";
 import { TEMPLATE_DEFINITIONS } from "./core/templates.js";
 import { startLoopgenServer } from "./server.js";
-import type { AdapterId, GenerationOptions, LoopTemplateId } from "./core/types.js";
+import type { AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId } from "./core/types.js";
 
 const program = new Command();
 
@@ -43,9 +43,10 @@ program
   .command("scan")
   .argument("[project]", "project directory", ".")
   .option("--json", "print the full scan as JSON")
+  .option("--demo", "scan the built-in demo project")
   .description("Scan a project and infer loop inputs.")
-  .action(async (project: string, options: { json?: boolean }) => {
-    const scan = await scanProject(path.resolve(project));
+  .action(async (project: string, options: { json?: boolean; demo?: boolean }) => {
+    const scan = await scanProject(options.demo ? demoProjectRoot() : path.resolve(project));
     if (options.json) {
       console.log(JSON.stringify(scan, null, 2));
       return;
@@ -66,9 +67,10 @@ program
   .argument("[project]", "project directory", ".")
   .option("--adapters <items>", "comma-separated adapters", "codex,claude")
   .option("--json", "print generated file metadata as JSON")
+  .option("--demo", "use the built-in demo project")
   .description("Create loop configuration in memory and print a summary.")
-  .action(async (template: string, project: string, options: { adapters: string; json?: boolean }) => {
-    const result = await generateLoopProject(buildGenerationOptions(project, template, options.adapters));
+  .action(async (template: string, project: string, options: { adapters: string; json?: boolean; demo?: boolean }) => {
+    const result = await generateLoopProject(buildGenerationOptions(project, template, options.adapters, options.demo ? "demo" : "project"));
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
       return;
@@ -81,9 +83,10 @@ program
   .argument("[project]", "project directory", ".")
   .option("--templates <items>", "comma-separated loop templates", "all")
   .option("--adapters <items>", "comma-separated adapters", "codex,claude")
+  .option("--demo", "use the built-in demo project")
   .description("Preview the files loopgen would write.")
-  .action(async (project: string, options: { templates: string; adapters: string }) => {
-    const result = await generateLoopProject(buildGenerationOptions(project, options.templates, options.adapters));
+  .action(async (project: string, options: { templates: string; adapters: string; demo?: boolean }) => {
+    const result = await generateLoopProject(buildGenerationOptions(project, options.templates, options.adapters, options.demo ? "demo" : "project"));
     printGenerationSummary(result);
     console.log("\nDiff preview:\n");
     console.log(result.diff || "No changes.");
@@ -114,9 +117,10 @@ program.parseAsync(process.argv).catch((error: unknown) => {
   process.exitCode = 1;
 });
 
-function buildGenerationOptions(project: string, templates: string, adapters: string): GenerationOptions {
+function buildGenerationOptions(project: string, templates: string, adapters: string, experienceMode: ExperienceMode = "project"): GenerationOptions {
   return {
     projectRoot: path.resolve(project),
+    experienceMode,
     selectedTemplates: parseTemplates(templates),
     adapters: parseAdapters(adapters)
   };

@@ -9,6 +9,7 @@
   "files": [
     "dist",
     "dist-web",
+    "examples",
     "README.md",
     "LICENSE"
   ],
