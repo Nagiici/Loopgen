@@ -399,7 +399,7 @@ p {
 .path-row {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: end;
 }
@@ -442,7 +442,7 @@ p {
 .settings-grid {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 12px;
   align-items: end;
 }
