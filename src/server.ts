@@ -1,11 +1,15 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { applyGeneratedFiles } from "./core/fs-plan.js";
 import { demoProjectRoot, generateLoopProject } from "./core/generator.js";
 import { scanProject } from "./core/scanner.js";
 import type { AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId, TemplateAudience, TemplateCategory } from "./core/types.js";
+
+const execFileAsync = promisify(execFile);
 
 export interface ServerOptions {
   projectRoot: string;
@@ -52,6 +56,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/choose-folder") {
+    sendJson(response, 200, await chooseLocalFolder());
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/preview") {
     const body = await readJsonBody(request);
     const result = await generateLoopProject(toGenerationOptions(body, defaultRoot));
@@ -76,6 +85,82 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
   }
 
   sendJson(response, 404, { error: "Unknown API route." });
+}
+
+async function chooseLocalFolder(): Promise<{ path?: string; canceled?: boolean; unsupported?: boolean; message?: string }> {
+  if (process.platform === "darwin") {
+    return chooseFolderWithAppleScript();
+  }
+  if (process.platform === "win32") {
+    return chooseFolderWithPowerShell();
+  }
+  return chooseFolderWithLinuxPicker();
+}
+
+async function chooseFolderWithAppleScript() {
+  try {
+    const { stdout } = await execFileAsync("osascript", [
+      "-e",
+      'POSIX path of (choose folder with prompt "Select a project folder for loopgen")'
+    ]);
+    return normalizeFolderPickerOutput(stdout);
+  } catch (error) {
+    return folderPickerError(error);
+  }
+}
+
+async function chooseFolderWithPowerShell() {
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-STA",
+      "-Command",
+      [
+        "Add-Type -AssemblyName System.Windows.Forms",
+        "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
+        "$dialog.Description = 'Select a project folder for loopgen'",
+        "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }"
+      ].join("; ")
+    ]);
+    return normalizeFolderPickerOutput(stdout);
+  } catch (error) {
+    return folderPickerError(error);
+  }
+}
+
+async function chooseFolderWithLinuxPicker() {
+  for (const command of [
+    { bin: "zenity", args: ["--file-selection", "--directory", "--title=Select a project folder for loopgen"] },
+    { bin: "kdialog", args: ["--getexistingdirectory", ".", "Select a project folder for loopgen"] }
+  ]) {
+    try {
+      const { stdout } = await execFileAsync(command.bin, command.args);
+      return normalizeFolderPickerOutput(stdout);
+    } catch (error) {
+      const result = folderPickerError(error);
+      if (result.canceled) return result;
+    }
+  }
+  return {
+    unsupported: true,
+    message: "No supported folder picker was found. Install zenity or kdialog, or paste the project path manually."
+  };
+}
+
+function normalizeFolderPickerOutput(stdout: string) {
+  const selectedPath = stdout.trim();
+  return selectedPath ? { path: selectedPath } : { canceled: true };
+}
+
+function folderPickerError(error: unknown) {
+  const details = error && typeof error === "object" && "stderr" in error ? String((error as { stderr?: unknown }).stderr ?? "") : "";
+  if (/User canceled|cancelled|canceled/i.test(details)) {
+    return { canceled: true };
+  }
+  return {
+    unsupported: true,
+    message: details.trim() || (error instanceof Error ? error.message : String(error))
+  };
 }
 
 function toGenerationOptions(body: Record<string, unknown>, defaultRoot: string): GenerationOptions {

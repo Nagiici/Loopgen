@@ -56,9 +56,10 @@ http://127.0.0.1:8787
 
 1. 选择 **Try demo**：快速查看 loop engineering 的效果。
 2. 选择 **Use my project**：扫描真实项目。
-3. 按角色或场景选择模板。
-4. 点击 **Generate preview** 查看 diff。
-5. 确认无误后再点击 **Apply files** 写入项目。
+3. 点击 **Choose folder** 从本地桌面选择项目目录，或手动粘贴项目路径。
+4. 按角色或场景选择模板。
+5. 点击 **Generate preview** 查看 diff。
+6. 确认无误后再点击 **Apply files** 写入项目。
 
 #### 4. 在真实项目中生成预览
 
@@ -175,9 +176,10 @@ In the wizard:
 
 1. Choose **Try demo** to see loop engineering outputs quickly.
 2. Choose **Use my project** to scan a real project.
-3. Filter templates by role or category.
-4. Click **Generate preview** to inspect the diff.
-5. Click **Apply files** only after reviewing the generated files.
+3. Click **Choose folder** to select a local project directory, or paste the project path manually.
+4. Filter templates by role or category.
+5. Click **Generate preview** to inspect the diff.
+6. Click **Apply files** only after reviewing the generated files.
 
 #### 4. Preview loops for a real project
 

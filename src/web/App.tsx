@@ -7,6 +7,7 @@ import {
   FileCode2,
   FlaskConical,
   FolderGit2,
+  FolderOpen,
   GitPullRequestArrow,
   Hammer,
   History,
@@ -73,6 +74,13 @@ const PROJECT_RECOMMENDED_TEMPLATE_IDS = TEMPLATE_DEFINITIONS.filter((template) 
 
 type CategoryFilter = TemplateCategory | "all";
 type AudienceFilter = TemplateAudience | "all";
+
+interface ChooseFolderResult {
+  path?: string;
+  canceled?: boolean;
+  unsupported?: boolean;
+  message?: string;
+}
 
 export function App() {
   const [experienceMode, setExperienceMode] = useState<ExperienceMode>(DEFAULT_MODE);
@@ -147,12 +155,13 @@ export function App() {
   );
   const modeLabel = experienceMode === "demo" ? "Demo" : "Project";
 
-  async function runScan() {
+  async function runScan(pathOverride?: string) {
     setStatus({ kind: "loading", message: experienceMode === "demo" ? "Loading demo" : "Scanning project" });
     setPreview(undefined);
     try {
       const params = new URLSearchParams({ experienceMode });
-      if (projectPath) params.set("path", projectPath);
+      const scanPath = pathOverride ?? projectPath;
+      if (scanPath) params.set("path", scanPath);
       const result = await api<ProjectScan>(`/api/scan?${params.toString()}`);
       setScan(result);
       setProjectPath(result.root);
@@ -171,6 +180,30 @@ export function App() {
       const message = errorMessage(error);
       setStatus({ kind: "error", message });
       recordHistory("Project scan failed", message, "error");
+    }
+  }
+
+  async function chooseProjectFolder() {
+    if (experienceMode === "demo") return;
+    setStatus({ kind: "loading", message: "Opening folder picker" });
+    setPreview(undefined);
+    try {
+      const result = await api<ChooseFolderResult>("/api/choose-folder", {});
+      if (result.canceled) {
+        setStatus({ kind: "idle", message: "Folder selection canceled" });
+        recordHistory("Folder selection canceled", "No project path was changed.", "warning");
+        return;
+      }
+      if (!result.path) {
+        throw new Error(result.message ?? "Folder picker is not available on this system.");
+      }
+      setProjectPath(result.path);
+      recordHistory("Folder selected", result.path, "success");
+      await runScan(result.path);
+    } catch (error) {
+      const message = errorMessage(error);
+      setStatus({ kind: "error", message });
+      recordHistory("Folder selection failed", message, "error");
     }
   }
 
@@ -381,7 +414,18 @@ export function App() {
                     onChange={(event) => setProjectPath(event.target.value)}
                   />
                 </label>
-                <button className="secondary-button compact-button" type="button" onClick={runScan}>
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  onClick={chooseProjectFolder}
+                  disabled={experienceMode === "demo" || status.kind === "loading"}
+                  data-testid="choose-folder"
+                  title={experienceMode === "demo" ? "Switch to Use my project to choose a folder" : "Choose a local project folder"}
+                >
+                  <FolderOpen size={16} />
+                  Choose folder
+                </button>
+                <button className="secondary-button compact-button" type="button" onClick={() => runScan()}>
                   {status.kind === "loading" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
                   {experienceMode === "demo" ? "Reload demo" : "Scan project"}
                 </button>
@@ -596,7 +640,8 @@ export function App() {
             experienceMode={experienceMode}
             projectPath={projectPath}
             onProjectPathChange={setProjectPath}
-            onScan={runScan}
+            onChooseProjectFolder={chooseProjectFolder}
+            onScan={() => runScan()}
             status={status}
             triggerCadence={triggerCadence}
             onTriggerCadenceChange={setTriggerCadence}
@@ -704,6 +749,7 @@ function SettingsView({
   experienceMode,
   projectPath,
   onProjectPathChange,
+  onChooseProjectFolder,
   onScan,
   status,
   triggerCadence,
@@ -719,6 +765,7 @@ function SettingsView({
   experienceMode: ExperienceMode;
   projectPath: string;
   onProjectPathChange: (value: string) => void;
+  onChooseProjectFolder: () => void;
   onScan: () => void;
   status: StatusState;
   triggerCadence: string;
@@ -762,6 +809,16 @@ function SettingsView({
               onChange={(event) => onProjectPathChange(event.target.value)}
             />
           </label>
+          <button
+            className="secondary-button compact-button"
+            type="button"
+            onClick={onChooseProjectFolder}
+            disabled={experienceMode === "demo" || status.kind === "loading"}
+            title={experienceMode === "demo" ? "Switch to Use my project to choose a folder" : "Choose a local project folder"}
+          >
+            <FolderOpen size={16} />
+            Choose folder
+          </button>
           <button className="secondary-button compact-button" type="button" onClick={onScan} disabled={status.kind === "loading"}>
             {status.kind === "loading" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
             Scan project
