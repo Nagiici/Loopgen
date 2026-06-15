@@ -1,10 +1,14 @@
 export type AdapterId = "codex" | "claude";
 
-export type LoopTemplateId =
-  | "ci-failure-repair"
-  | "test-repair"
-  | "dependency-upgrade"
-  | "pr-comment-handling";
+export type LoopTemplateId = string;
+
+export type TemplateCategory = "maintenance" | "delivery" | "quality" | "knowledge" | "cross-functional";
+
+export type TemplateAudience = "developer" | "qa" | "product" | "ops" | "data" | "solutions";
+
+export type TemplateDifficulty = "intro" | "standard" | "advanced";
+
+export type ExperienceMode = "demo" | "project";
 
 export interface CommandSet {
   install?: string;
@@ -51,6 +55,10 @@ export interface WizardAnswers {
 export interface LoopSpec {
   id: LoopTemplateId;
   title: string;
+  category: TemplateCategory;
+  audience: TemplateAudience[];
+  difficulty: TemplateDifficulty;
+  expectedOutcome: string;
   goal: string;
   trigger: {
     type: string;
@@ -84,6 +92,12 @@ export interface TemplateDefinition {
   id: LoopTemplateId;
   title: string;
   summary: string;
+  category: TemplateCategory;
+  audience: TemplateAudience[];
+  difficulty: TemplateDifficulty;
+  expectedOutcome: string;
+  demoAvailable: boolean;
+  recommendedForDemo: boolean;
   recommended: boolean;
 }
 
@@ -93,9 +107,12 @@ export interface GeneratedFile {
 }
 
 export interface GenerationOptions {
-  projectRoot: string;
+  projectRoot?: string;
+  experienceMode?: ExperienceMode;
   selectedTemplates?: LoopTemplateId[];
   adapters?: AdapterId[];
+  audienceFilter?: TemplateAudience;
+  categoryFilter?: TemplateCategory;
   triggerCadence?: string;
   acceptanceCriteria?: string;
   allowPrCreation?: boolean;
@@ -104,6 +121,7 @@ export interface GenerationOptions {
 }
 
 export interface GenerationResult {
+  experienceMode: ExperienceMode;
   scan: ProjectScan;
   loops: LoopSpec[];
   files: GeneratedFile[];

@@ -3,9 +3,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyGeneratedFiles } from "./core/fs-plan.js";
-import { generateLoopProject } from "./core/generator.js";
+import { demoProjectRoot, generateLoopProject } from "./core/generator.js";
 import { scanProject } from "./core/scanner.js";
-import type { AdapterId, GenerationOptions, LoopTemplateId } from "./core/types.js";
+import type { AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId, TemplateAudience, TemplateCategory } from "./core/types.js";
 
 export interface ServerOptions {
   projectRoot: string;
@@ -46,7 +46,8 @@ export async function startLoopgenServer(options: ServerOptions) {
 
 async function handleApi(request: IncomingMessage, response: ServerResponse, url: URL, defaultRoot: string) {
   if (request.method === "GET" && url.pathname === "/api/scan") {
-    const root = url.searchParams.get("path") || defaultRoot;
+    const experienceMode = parseExperienceMode(url.searchParams.get("experienceMode"));
+    const root = experienceMode === "demo" ? demoProjectRoot() : url.searchParams.get("path") || defaultRoot;
     sendJson(response, 200, await scanProject(root));
     return;
   }
@@ -64,6 +65,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       sendJson(response, 400, { error: "Apply requires confirm: true." });
       return;
     }
+    if (body.experienceMode === "demo") {
+      sendJson(response, 400, { error: "Demo mode is preview-only. Switch to Use my project before applying files." });
+      return;
+    }
     const result = await generateLoopProject(toGenerationOptions(body, defaultRoot));
     const written = await applyGeneratedFiles(result.scan.root, result.files);
     sendJson(response, 200, { written, warnings: result.warnings });
@@ -76,14 +81,21 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 function toGenerationOptions(body: Record<string, unknown>, defaultRoot: string): GenerationOptions {
   return {
     projectRoot: typeof body.projectRoot === "string" && body.projectRoot.length > 0 ? body.projectRoot : defaultRoot,
+    experienceMode: parseExperienceMode(body.experienceMode),
     selectedTemplates: stringArray(body.selectedTemplates) as LoopTemplateId[],
     adapters: stringArray(body.adapters) as AdapterId[],
+    audienceFilter: typeof body.audienceFilter === "string" ? (body.audienceFilter as TemplateAudience) : undefined,
+    categoryFilter: typeof body.categoryFilter === "string" ? (body.categoryFilter as TemplateCategory) : undefined,
     triggerCadence: typeof body.triggerCadence === "string" ? body.triggerCadence : undefined,
     acceptanceCriteria: typeof body.acceptanceCriteria === "string" ? body.acceptanceCriteria : undefined,
     allowPrCreation: Boolean(body.allowPrCreation),
     allowedCommands: stringArray(body.allowedCommands),
     maxIterations: typeof body.maxIterations === "number" ? body.maxIterations : undefined
   };
+}
+
+function parseExperienceMode(value: unknown): ExperienceMode {
+  return value === "demo" ? "demo" : "project";
 }
 
 function stringArray(value: unknown): string[] | undefined {

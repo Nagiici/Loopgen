@@ -22,40 +22,17 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type {
   AdapterId,
+  ExperienceMode,
   GenerationResult,
   LoopTemplateId,
   ProjectScan,
+  TemplateAudience,
+  TemplateCategory,
   TemplateDefinition
 } from "../core/types.js";
+import { TEMPLATE_AUDIENCES, TEMPLATE_CATEGORIES, TEMPLATE_DEFINITIONS } from "../core/templates.js";
 
-const TEMPLATES: TemplateDefinition[] = [
-  {
-    id: "ci-failure-repair",
-    title: "CI failure repair",
-    summary: "Diagnose and fix failing CI workflows and jobs.",
-    recommended: true
-  },
-  {
-    id: "test-repair",
-    title: "Test repair",
-    summary: "Find and fix failing tests and flaky test symptoms.",
-    recommended: true
-  },
-  {
-    id: "dependency-upgrade",
-    title: "Dependency upgrade",
-    summary: "Safely upgrade dependencies and resolve issues.",
-    recommended: false
-  },
-  {
-    id: "pr-comment-handling",
-    title: "PR comment handling",
-    summary: "Triage and respond to pull request comments.",
-    recommended: false
-  }
-];
-
-const TEMPLATE_ICONS: Record<LoopTemplateId, typeof Hammer> = {
+const TEMPLATE_ICONS: Partial<Record<LoopTemplateId, typeof Hammer>> = {
   "ci-failure-repair": Hammer,
   "test-repair": FlaskConical,
   "dependency-upgrade": Upload,
@@ -88,14 +65,24 @@ const ADAPTERS: AdapterMeta[] = [
 ];
 
 const DEFAULT_PATH = new URLSearchParams(window.location.search).get("project") ?? "";
+const DEFAULT_MODE: ExperienceMode = DEFAULT_PATH ? "project" : "demo";
+const DEMO_TEMPLATE_IDS = TEMPLATE_DEFINITIONS.filter((template) => template.demoAvailable && template.recommendedForDemo).map(
+  (template) => template.id
+);
+const PROJECT_RECOMMENDED_TEMPLATE_IDS = TEMPLATE_DEFINITIONS.filter((template) => template.recommended).map((template) => template.id);
+
+type CategoryFilter = TemplateCategory | "all";
+type AudienceFilter = TemplateAudience | "all";
 
 export function App() {
+  const [experienceMode, setExperienceMode] = useState<ExperienceMode>(DEFAULT_MODE);
   const [projectPath, setProjectPath] = useState(DEFAULT_PATH);
   const [scan, setScan] = useState<ProjectScan | undefined>();
-  const [selectedTemplates, setSelectedTemplates] = useState<LoopTemplateId[]>([
-    "ci-failure-repair",
-    "test-repair"
-  ]);
+  const [selectedTemplates, setSelectedTemplates] = useState<LoopTemplateId[]>(
+    DEFAULT_MODE === "demo" ? DEMO_TEMPLATE_IDS : PROJECT_RECOMMENDED_TEMPLATE_IDS
+  );
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>("all");
   const [adapters, setAdapters] = useState<AdapterId[]>(["codex", "claude"]);
   const [expandedAdapters, setExpandedAdapters] = useState<AdapterId[]>([]);
   const [allowedCommands, setAllowedCommands] = useState("");
@@ -111,7 +98,7 @@ export function App() {
 
   useEffect(() => {
     void runScan();
-  }, []);
+  }, [experienceMode]);
 
   useEffect(() => {
     if (scan && !allowedCommands) {
@@ -138,17 +125,45 @@ export function App() {
   const commandList = commandLines(allowedCommands);
   const warningCount = preview?.warnings.length ?? scan?.warnings.length ?? 0;
   const previewFileCount = preview?.files.length ?? 0;
+  const playbookCount = preview?.files.filter((file) => file.path.startsWith(".loopgen/playbooks/")).length ?? 0;
+  const visibleTemplates = useMemo(
+    () =>
+      TEMPLATE_DEFINITIONS.filter((template) => {
+        const categoryMatches = categoryFilter === "all" || template.category === categoryFilter;
+        const audienceMatches = audienceFilter === "all" || template.audience.includes(audienceFilter);
+        return (categoryMatches && audienceMatches) || selectedTemplates.includes(template.id);
+      }),
+    [audienceFilter, categoryFilter, selectedTemplates]
+  );
+  const recommendedSelection = useMemo(
+    () =>
+      TEMPLATE_DEFINITIONS.filter((template) => {
+        const categoryMatches = categoryFilter === "all" || template.category === categoryFilter;
+        const audienceMatches = audienceFilter === "all" || template.audience.includes(audienceFilter);
+        const matchesMode = experienceMode === "demo" ? template.demoAvailable && template.recommendedForDemo : template.recommended;
+        return categoryMatches && audienceMatches && matchesMode;
+      }).map((template) => template.id),
+    [audienceFilter, categoryFilter, experienceMode]
+  );
+  const modeLabel = experienceMode === "demo" ? "Demo" : "Project";
 
   async function runScan() {
-    setStatus({ kind: "loading", message: "Scanning project" });
+    setStatus({ kind: "loading", message: experienceMode === "demo" ? "Loading demo" : "Scanning project" });
     setPreview(undefined);
     try {
-      const result = await api<ProjectScan>(`/api/scan?path=${encodeURIComponent(projectPath)}`);
+      const params = new URLSearchParams({ experienceMode });
+      if (projectPath) params.set("path", projectPath);
+      const result = await api<ProjectScan>(`/api/scan?${params.toString()}`);
       setScan(result);
       setProjectPath(result.root);
-      setStatus({ kind: result.warnings.length ? "warning" : "success", message: "Project scan completed" });
+      setAllowedCommands(
+        [result.commands.install, result.commands.test, result.commands.lint, result.commands.build, result.commands.format]
+          .filter(Boolean)
+          .join("\n")
+      );
+      setStatus({ kind: result.warnings.length ? "warning" : "success", message: experienceMode === "demo" ? "Demo ready" : "Project scan completed" });
       recordHistory(
-        "Project scan",
+        experienceMode === "demo" ? "Demo loaded" : "Project scan",
         `${result.projectName} scanned with ${result.files.total.toLocaleString()} file(s).`,
         result.warnings.length ? "warning" : "success"
       );
@@ -163,9 +178,12 @@ export function App() {
     setStatus({ kind: "loading", message: "Generating preview" });
     try {
       const result = await api<GenerationResult>("/api/preview", {
-        projectRoot: projectPath,
+        experienceMode,
+        projectRoot: experienceMode === "project" ? projectPath : undefined,
         selectedTemplates,
         adapters,
+        audienceFilter: audienceFilter === "all" ? undefined : audienceFilter,
+        categoryFilter: categoryFilter === "all" ? undefined : categoryFilter,
         triggerCadence,
         acceptanceCriteria,
         allowPrCreation,
@@ -188,11 +206,17 @@ export function App() {
 
   async function applyFiles() {
     if (!preview) return;
+    if (experienceMode === "demo") {
+      setStatus({ kind: "warning", message: "Demo mode is preview-only" });
+      recordHistory("Apply skipped", "Switch to Use my project before writing generated files.", "warning");
+      return;
+    }
     const confirmed = window.confirm(`Write ${preview.files.length} loopgen files to this project?`);
     if (!confirmed) return;
     setStatus({ kind: "loading", message: "Applying files" });
     try {
       const result = await api<{ written: string[]; warnings: string[] }>("/api/apply", {
+        experienceMode,
         projectRoot: projectPath,
         selectedTemplates,
         adapters,
@@ -214,6 +238,20 @@ export function App() {
       setStatus({ kind: "error", message });
       recordHistory("Apply failed", message, "error");
     }
+  }
+
+  function chooseExperienceMode(mode: ExperienceMode) {
+    if (mode === "project" && experienceMode === "demo" && projectPath.includes("/examples/demo-webapp")) {
+      setProjectPath(DEFAULT_PATH);
+    }
+    setExperienceMode(mode);
+    setPreview(undefined);
+    setSelectedTemplates(mode === "demo" ? DEMO_TEMPLATE_IDS : PROJECT_RECOMMENDED_TEMPLATE_IDS);
+  }
+
+  function selectRecommendedTemplates() {
+    const nextSelection = recommendedSelection.length ? recommendedSelection : visibleTemplates.map((template) => template.id);
+    setSelectedTemplates(nextSelection);
   }
 
   function toggleAdapterExpansion(id: AdapterId) {
@@ -298,28 +336,54 @@ export function App() {
         {activeView === "configure" ? (
         <section className="content-grid">
           <div className="main-column">
+            <section className="tool-panel experience-panel" aria-labelledby="experience-heading">
+              <SectionTitle
+                id="experience-heading"
+                title="Experience"
+                description="Choose whether to preview loop engineering with the built-in demo or generate files for a real project."
+                count={modeLabel}
+              />
+              <div className="mode-grid">
+                <ModeButton
+                  icon={Sparkles}
+                  title="Try demo"
+                  description="Use the built-in demo project and preview loop outputs without writing files."
+                  active={experienceMode === "demo"}
+                  onClick={() => chooseExperienceMode("demo")}
+                />
+                <ModeButton
+                  icon={FolderGit2}
+                  title="Use my project"
+                  description="Scan a local project, select scenarios, preview the diff, then apply generated files."
+                  active={experienceMode === "project"}
+                  onClick={() => chooseExperienceMode("project")}
+                />
+              </div>
+            </section>
+
             <section className="tool-panel scan-panel" aria-labelledby="project-scan-heading">
-              <div className="panel-kicker">Project scan</div>
+              <div className="panel-kicker">{experienceMode === "demo" ? "Demo project" : "Project scan"}</div>
               <div className="scan-bar">
                 <div>
-                  <h1 id="project-scan-heading">Project scan</h1>
-                  <p>{scan ? `Scanned ${new Date(scan.detectedAt).toLocaleTimeString()}` : "Scan the project before generating loops."}</p>
+                  <h1 id="project-scan-heading">{experienceMode === "demo" ? "Built-in demo" : "Project scan"}</h1>
+                  <p>{scan ? `Scanned ${new Date(scan.detectedAt).toLocaleTimeString()}` : "Scan before generating loops."}</p>
                 </div>
                 <StatusPill status={status} />
               </div>
               <div className="path-row">
                 <label>
-                  Project path
+                  {experienceMode === "demo" ? "Demo fixture path" : "Project path"}
                   <input
                     aria-label="Project path"
                     value={projectPath}
                     placeholder="Current working directory"
+                    disabled={experienceMode === "demo"}
                     onChange={(event) => setProjectPath(event.target.value)}
                   />
                 </label>
                 <button className="secondary-button compact-button" type="button" onClick={runScan}>
                   {status.kind === "loading" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-                  Scan project
+                  {experienceMode === "demo" ? "Reload demo" : "Scan project"}
                 </button>
               </div>
               <div className="scan-layout">
@@ -340,23 +404,59 @@ export function App() {
               </div>
             </section>
 
-            <section className="tool-panel" aria-labelledby="maintenance-loops-heading">
+            <section className="tool-panel" aria-labelledby="scenario-templates-heading">
               <SectionTitle
-                id="maintenance-loops-heading"
-                title="Maintenance loops"
-                description="Select loop templates to generate."
-                count={`${selectedTemplates.length}/${TEMPLATES.length}`}
+                id="scenario-templates-heading"
+                title="Scenario templates"
+                description="Filter by role or category, then select the loop playbooks and agent configs to generate."
+                count={`${selectedTemplates.length}/${TEMPLATE_DEFINITIONS.length}`}
               />
-              <div className="template-list">
-                {TEMPLATES.map((template) => (
+              <div className="filter-row">
+                <label>
+                  Category
+                  <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}>
+                    <option value="all">All categories</option>
+                    {TEMPLATE_CATEGORIES.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Audience
+                  <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value as AudienceFilter)}>
+                    <option value="all">All audiences</option>
+                    {TEMPLATE_AUDIENCES.map((audience) => (
+                      <option key={audience.id} value={audience.id}>
+                        {audience.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="secondary-button compact-button" type="button" onClick={selectRecommendedTemplates}>
+                  <ShieldCheck size={16} />
+                  Use recommended
+                </button>
+              </div>
+              {visibleTemplates.length ? (
+                <div className="template-list">
+                  {visibleTemplates.map((template) => (
                   <TemplateRow
                     key={template.id}
                     template={template}
                     checked={selectedTemplates.includes(template.id)}
                     onChange={(checked) => toggleTemplate(template.id, checked, setSelectedTemplates)}
                   />
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state compact-empty">
+                  <FileCode2 size={23} />
+                  <strong>No templates match</strong>
+                  <span>Change the filters or use the recommended set.</span>
+                </div>
+              )}
             </section>
 
             <section className="tool-panel" aria-labelledby="adapters-heading">
@@ -436,7 +536,13 @@ export function App() {
               <div>
                 <div className="panel-kicker">Preview diff</div>
                 <h2>Preview diff</h2>
-                <p>{preview ? "Preview generated from current selections." : "Generate a preview before writing files."}</p>
+                <p>
+                  {preview
+                    ? `${modeLabel} preview generated from current selections.`
+                    : experienceMode === "demo"
+                      ? "Generate a demo preview to inspect loop engineering outputs."
+                      : "Generate a preview before writing files."}
+                </p>
               </div>
               <ShieldCheck size={21} />
             </div>
@@ -444,6 +550,10 @@ export function App() {
               <span>
                 <strong>{previewFileCount}</strong>
                 files
+              </span>
+              <span>
+                <strong>{playbookCount}</strong>
+                playbooks
               </span>
               <span className={warningCount > 0 ? "warn-stat" : ""}>
                 <strong>{warningCount}</strong>
@@ -458,12 +568,12 @@ export function App() {
                   className="secondary-button"
                   type="button"
                   onClick={applyFiles}
-                  disabled={!preview || status.kind === "loading"}
+                  disabled={!preview || status.kind === "loading" || experienceMode === "demo"}
                   data-testid="apply-files"
-                  title={preview ? "Apply generated files" : "Generate preview first"}
+                  title={experienceMode === "demo" ? "Demo mode is preview-only" : preview ? "Apply generated files" : "Generate preview first"}
                 >
                   <Check size={17} />
-                  Apply files
+                  {experienceMode === "demo" ? "Preview only" : "Apply files"}
                 </button>
                 <button
                   className="primary-button"
@@ -483,6 +593,7 @@ export function App() {
           <HistoryView items={historyItems} scan={scan} preview={preview} />
         ) : (
           <SettingsView
+            experienceMode={experienceMode}
             projectPath={projectPath}
             onProjectPathChange={setProjectPath}
             onScan={runScan}
@@ -590,6 +701,7 @@ function HistoryView({
 }
 
 function SettingsView({
+  experienceMode,
   projectPath,
   onProjectPathChange,
   onScan,
@@ -604,6 +716,7 @@ function SettingsView({
   onAllowPrCreationChange,
   adapters
 }: {
+  experienceMode: ExperienceMode;
   projectPath: string;
   onProjectPathChange: (value: string) => void;
   onScan: () => void;
@@ -636,7 +749,7 @@ function SettingsView({
         <SectionTitle
           id="workspace-settings-heading"
           title="Workspace"
-          description="Set the project root used by loopgen's local scanner."
+          description={experienceMode === "demo" ? "Demo mode uses the built-in fixture and stays preview-only." : "Set the project root used by loopgen's local scanner."}
         />
         <div className="settings-grid">
           <label className="wide-field">
@@ -645,6 +758,7 @@ function SettingsView({
               aria-label="Settings project path"
               value={projectPath}
               placeholder="Current working directory"
+              disabled={experienceMode === "demo"}
               onChange={(event) => onProjectPathChange(event.target.value)}
             />
           </label>
@@ -728,6 +842,31 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ModeButton({
+  icon: Icon,
+  title,
+  description,
+  active,
+  onClick
+}: {
+  icon: typeof Sparkles;
+  title: string;
+  description: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button className={`mode-button ${active ? "active" : ""}`} type="button" onClick={onClick}>
+      <Icon size={20} />
+      <span>
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </span>
+      <span className="mode-check">{active ? <Check size={15} /> : null}</span>
+    </button>
+  );
+}
+
 function SectionTitle({
   id,
   title,
@@ -779,21 +918,55 @@ function TemplateRow({
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
-  const Icon = TEMPLATE_ICONS[template.id];
+  const Icon = iconForTemplate(template);
+  const categoryLabel = categoryLabelFor(template.category);
+  const audienceLabels = template.audience.map(audienceLabelFor).join(", ");
+  const recommendationLabel = template.recommendedForDemo ? "Demo ready" : template.recommended ? "Recommended" : "Optional";
   return (
     <label className={`template-row ${checked ? "selected" : ""}`}>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       <span className="checkbox-mark">{checked ? <Check size={15} /> : null}</span>
       <Icon size={20} />
       <span className="template-copy">
-        <strong>{template.title}</strong>
+        <span className="template-title-line">
+          <strong>{template.title}</strong>
+          <small>{difficultyLabelFor(template.difficulty)}</small>
+        </span>
         <small>{template.summary}</small>
+        <span className="template-meta">
+          <small>{categoryLabel}</small>
+          <small>{audienceLabels}</small>
+        </span>
+        <small className="template-outcome">{template.expectedOutcome}</small>
       </span>
-      <span className={template.recommended ? "recommend recommended" : "recommend optional"}>
-        {template.recommended ? "Recommended" : "Optional"}
+      <span className={template.recommended || template.recommendedForDemo ? "recommend recommended" : "recommend optional"}>
+        {recommendationLabel}
       </span>
     </label>
   );
+}
+
+function iconForTemplate(template: TemplateDefinition) {
+  if (TEMPLATE_ICONS[template.id]) return TEMPLATE_ICONS[template.id]!;
+  if (template.category === "maintenance") return Hammer;
+  if (template.category === "delivery") return Upload;
+  if (template.category === "quality") return ShieldCheck;
+  if (template.category === "knowledge") return FileCode2;
+  return GitPullRequestArrow;
+}
+
+function categoryLabelFor(category: TemplateCategory) {
+  return TEMPLATE_CATEGORIES.find((item) => item.id === category)?.label ?? category;
+}
+
+function audienceLabelFor(audience: TemplateAudience) {
+  return TEMPLATE_AUDIENCES.find((item) => item.id === audience)?.label ?? audience;
+}
+
+function difficultyLabelFor(difficulty: TemplateDefinition["difficulty"]) {
+  if (difficulty === "intro") return "Intro";
+  if (difficulty === "advanced") return "Advanced";
+  return "Standard";
 }
 
 function AdapterRow({
