@@ -1,4 +1,6 @@
-export type AdapterId = "codex" | "claude";
+export type AdapterId = "codex" | "claude" | "ollama" | "openai-compatible";
+
+export type AdapterPreset = "ollama" | "lm-studio" | "llama-cpp" | "custom-openai-compatible";
 
 export type LoopTemplateId = string;
 
@@ -45,6 +47,7 @@ export interface ProjectScan {
 export interface WizardAnswers {
   selectedTemplates: LoopTemplateId[];
   adapters: AdapterId[];
+  adapterConfigs: AdapterConfigMap;
   triggerCadence: string;
   acceptanceCriteria: string;
   allowPrCreation: boolean;
@@ -106,11 +109,35 @@ export interface GeneratedFile {
   content: string;
 }
 
+export interface AdapterDefinition {
+  id: AdapterId;
+  name: string;
+  vendor: string;
+  description: string;
+  outputPath: string;
+  files: string[];
+  capabilities: string[];
+  prBehavior: string;
+  safetyNotes: string[];
+  configurable: boolean;
+}
+
+export interface AdapterConfig {
+  preset?: AdapterPreset;
+  baseUrl?: string;
+  model?: string;
+  apiKeyEnv?: string;
+  warnings?: string[];
+}
+
+export type AdapterConfigMap = Partial<Record<AdapterId, AdapterConfig>>;
+
 export interface GenerationOptions {
   projectRoot?: string;
   experienceMode?: ExperienceMode;
   selectedTemplates?: LoopTemplateId[];
   adapters?: AdapterId[];
+  adapterConfigs?: AdapterConfigMap;
   audienceFilter?: TemplateAudience;
   categoryFilter?: TemplateCategory;
   triggerCadence?: string;

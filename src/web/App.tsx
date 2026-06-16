@@ -22,7 +22,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
+  AdapterConfig,
+  AdapterConfigMap,
+  AdapterDefinition,
   AdapterId,
+  AdapterPreset,
   ExperienceMode,
   GenerationResult,
   LoopTemplateId,
@@ -31,6 +35,7 @@ import type {
   TemplateCategory,
   TemplateDefinition
 } from "../core/types.js";
+import { ADAPTER_DEFINITIONS, ADAPTER_PRESETS, defaultAdapterConfig } from "../core/adapters.js";
 import { TEMPLATE_AUDIENCES, TEMPLATE_CATEGORIES, TEMPLATE_DEFINITIONS } from "../core/templates.js";
 
 const TEMPLATE_ICONS: Partial<Record<LoopTemplateId, typeof Hammer>> = {
@@ -39,31 +44,6 @@ const TEMPLATE_ICONS: Partial<Record<LoopTemplateId, typeof Hammer>> = {
   "dependency-upgrade": Upload,
   "pr-comment-handling": GitPullRequestArrow
 };
-
-const ADAPTERS: AdapterMeta[] = [
-  {
-    id: "codex",
-    name: "Codex",
-    vendor: "OpenAI",
-    description: "Skills, automation prompts, checker TOML",
-    outputPath: ".codex/",
-    files: ["skills/*/SKILL.md", "automations/*.md", "agents/*-checker.toml"],
-    capabilities: ["Automation prompt", "Project skill", "Checker agent"],
-    prBehavior: "Can prepare a PR only when the loop allows PR creation.",
-    safetyNotes: ["Dry-run through preview before files are applied.", "Forbidden paths are listed in each generated loop."]
-  },
-  {
-    id: "claude",
-    name: "Claude",
-    vendor: "Anthropic",
-    description: "Skills, loop guides, checker notes",
-    outputPath: ".claude/",
-    files: ["skills/*/SKILL.md", "loops/*.md", "agents/*-checker.md"],
-    capabilities: ["Claude skill", "Loop guide", "Checker notes"],
-    prBehavior: "Records PR handling guidance; it does not create PRs by default.",
-    safetyNotes: ["Requires the user's local Claude Code setup.", "State files record attempts and blockers."]
-  }
-];
 
 const DEFAULT_PATH = new URLSearchParams(window.location.search).get("project") ?? "";
 const DEFAULT_MODE: ExperienceMode = DEFAULT_PATH ? "project" : "demo";
@@ -92,6 +72,10 @@ export function App() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>("all");
   const [adapters, setAdapters] = useState<AdapterId[]>(["codex", "claude"]);
+  const [adapterConfigs, setAdapterConfigs] = useState<AdapterConfigMap>({
+    ollama: defaultAdapterConfig("ollama"),
+    "openai-compatible": defaultAdapterConfig("openai-compatible")
+  });
   const [expandedAdapters, setExpandedAdapters] = useState<AdapterId[]>([]);
   const [allowedCommands, setAllowedCommands] = useState("");
   const [triggerCadence, setTriggerCadence] = useState("manual");
@@ -215,6 +199,7 @@ export function App() {
         projectRoot: experienceMode === "project" ? projectPath : undefined,
         selectedTemplates,
         adapters,
+        adapterConfigs,
         audienceFilter: audienceFilter === "all" ? undefined : audienceFilter,
         categoryFilter: categoryFilter === "all" ? undefined : categoryFilter,
         triggerCadence,
@@ -253,6 +238,7 @@ export function App() {
         projectRoot: projectPath,
         selectedTemplates,
         adapters,
+        adapterConfigs,
         triggerCadence,
         acceptanceCriteria,
         allowPrCreation,
@@ -285,6 +271,17 @@ export function App() {
   function selectRecommendedTemplates() {
     const nextSelection = recommendedSelection.length ? recommendedSelection : visibleTemplates.map((template) => template.id);
     setSelectedTemplates(nextSelection);
+  }
+
+  function updateAdapterConfig(id: AdapterId, patch: AdapterConfig) {
+    setAdapterConfigs((current) => ({
+      ...current,
+      [id]: {
+        ...defaultAdapterConfig(id),
+        ...current[id],
+        ...patch
+      }
+    }));
   }
 
   function toggleAdapterExpansion(id: AdapterId) {
@@ -508,17 +505,19 @@ export function App() {
                 id="adapters-heading"
                 title="Adapters"
                 description="Choose which agent configuration files loopgen should emit."
-                count={`${adapters.length}/${ADAPTERS.length}`}
+                count={`${adapters.length}/${ADAPTER_DEFINITIONS.length}`}
               />
               <div className="adapter-list">
-                {ADAPTERS.map((adapter) => (
+                {ADAPTER_DEFINITIONS.map((adapter) => (
                   <AdapterRow
                     key={adapter.id}
                     adapter={adapter}
                     checked={adapters.includes(adapter.id)}
                     expanded={expandedAdapters.includes(adapter.id)}
+                    config={adapterConfigs[adapter.id] ?? defaultAdapterConfig(adapter.id)}
                     allowPrCreation={allowPrCreation}
                     onCheckedChange={(checked) => toggleAdapter(adapter.id, checked, setAdapters)}
+                    onConfigChange={(patch) => updateAdapterConfig(adapter.id, patch)}
                     onToggle={() => toggleAdapterExpansion(adapter.id)}
                   />
                 ))}
@@ -675,18 +674,6 @@ interface StatusState {
   message: string;
 }
 
-interface AdapterMeta {
-  id: AdapterId;
-  name: string;
-  vendor: string;
-  description: string;
-  outputPath: string;
-  files: string[];
-  capabilities: string[];
-  prBehavior: string;
-  safetyNotes: string[];
-}
-
 function HistoryView({
   items,
   scan,
@@ -779,7 +766,7 @@ function SettingsView({
   adapters: AdapterId[];
 }) {
   const commands = commandLines(allowedCommands);
-  const selectedAdapters = ADAPTERS.filter((adapter) => adapters.includes(adapter.id));
+  const selectedAdapters = ADAPTER_DEFINITIONS.filter((adapter) => adapters.includes(adapter.id));
 
   return (
     <section className="workspace-page settings-page" aria-labelledby="settings-heading">
@@ -871,7 +858,7 @@ function SettingsView({
           id="adapter-settings-heading"
           title="Adapter outputs"
           description="Selected adapters are configured on the Configure page."
-          count={`${selectedAdapters.length}/${ADAPTERS.length}`}
+          count={`${selectedAdapters.length}/${ADAPTER_DEFINITIONS.length}`}
         />
         <div className="settings-adapter-list">
           {selectedAdapters.map((adapter) => (
@@ -1030,15 +1017,19 @@ function AdapterRow({
   adapter,
   checked,
   expanded,
+  config,
   allowPrCreation,
   onCheckedChange,
+  onConfigChange,
   onToggle
 }: {
-  adapter: AdapterMeta;
+  adapter: AdapterDefinition;
   checked: boolean;
   expanded: boolean;
+  config: AdapterConfig;
   allowPrCreation: boolean;
   onCheckedChange: (checked: boolean) => void;
+  onConfigChange: (patch: AdapterConfig) => void;
   onToggle: () => void;
 }) {
   const panelId = `adapter-panel-${adapter.id}`;
@@ -1102,10 +1093,93 @@ function AdapterRow({
               ))}
             </ul>
           </div>
+          {adapter.configurable ? (
+            <AdapterConfigFields adapter={adapter} config={config} onConfigChange={onConfigChange} />
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function AdapterConfigFields({
+  adapter,
+  config,
+  onConfigChange
+}: {
+  adapter: AdapterDefinition;
+  config: AdapterConfig;
+  onConfigChange: (patch: AdapterConfig) => void;
+}) {
+  if (adapter.id === "ollama") {
+    return (
+      <div className="detail-item wide adapter-config">
+        <span>Local model config</span>
+        <div className="adapter-config-grid">
+          <label>
+            Base URL
+            <input
+              value={config.baseUrl ?? ""}
+              placeholder="http://localhost:11434"
+              onChange={(event) => onConfigChange({ baseUrl: event.target.value })}
+            />
+          </label>
+          <label>
+            Model
+            <input value={config.model ?? ""} placeholder="llama3.1" onChange={(event) => onConfigChange({ model: event.target.value })} />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  if (adapter.id === "openai-compatible") {
+    return (
+      <div className="detail-item wide adapter-config">
+        <span>Local model config</span>
+        <div className="adapter-config-grid">
+          <label>
+            Preset
+            <select value={config.preset ?? "lm-studio"} onChange={(event) => applyOpenAiCompatiblePreset(event.target.value as AdapterPreset, onConfigChange)}>
+              <option value="lm-studio">LM Studio</option>
+              <option value="llama-cpp">llama.cpp</option>
+              <option value="custom-openai-compatible">Custom</option>
+            </select>
+          </label>
+          <label>
+            Base URL
+            <input
+              value={config.baseUrl ?? ""}
+              placeholder="http://localhost:1234/v1"
+              onChange={(event) => onConfigChange({ baseUrl: event.target.value, preset: "custom-openai-compatible" })}
+            />
+          </label>
+          <label>
+            Model
+            <input value={config.model ?? ""} placeholder="qwen2.5-coder" onChange={(event) => onConfigChange({ model: event.target.value })} />
+          </label>
+          <label>
+            API key env
+            <input
+              value={config.apiKeyEnv ?? ""}
+              placeholder="LOCAL_LLM_API_KEY"
+              onChange={(event) => onConfigChange({ apiKeyEnv: event.target.value })}
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function applyOpenAiCompatiblePreset(preset: AdapterPreset, onConfigChange: (patch: AdapterConfig) => void) {
+  const presetConfig = ADAPTER_PRESETS[preset];
+  onConfigChange({
+    preset,
+    baseUrl: presetConfig.baseUrl
+  });
 }
 
 function DetailItem({

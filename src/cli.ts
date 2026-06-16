@@ -9,13 +9,14 @@ import { demoProjectRoot, generateLoopProject } from "./core/generator.js";
 import { scanProject } from "./core/scanner.js";
 import { TEMPLATE_DEFINITIONS } from "./core/templates.js";
 import { startLoopgenServer } from "./server.js";
-import type { AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId } from "./core/types.js";
+import { DEFAULT_ADAPTER_IDS, parseAdapterIds } from "./core/adapters.js";
+import type { AdapterConfigMap, AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId } from "./core/types.js";
 
 const program = new Command();
 
 program
   .name("loopgen")
-  .description("Local-first loop engineering generator for Codex and Claude.")
+  .description("Local-first loop engineering generator for Codex, Claude, and local model runtimes.")
   .version("0.1.0");
 
 program
@@ -65,12 +66,19 @@ program
   .command("create")
   .argument("[template]", "template id or 'all'", "all")
   .argument("[project]", "project directory", ".")
-  .option("--adapters <items>", "comma-separated adapters", "codex,claude")
+  .option("--adapters <items>", "comma-separated adapters", DEFAULT_ADAPTER_IDS.join(","))
+  .option("--ollama-model <model>", "model name for the Ollama adapter")
+  .option("--ollama-base-url <url>", "base URL for the Ollama adapter")
+  .option("--openai-compatible-model <model>", "model name for the OpenAI-compatible adapter")
+  .option("--openai-compatible-base-url <url>", "base URL for the OpenAI-compatible adapter")
+  .option("--openai-compatible-api-key-env <name>", "environment variable name for an OpenAI-compatible API key")
   .option("--json", "print generated file metadata as JSON")
   .option("--demo", "use the built-in demo project")
   .description("Create loop configuration in memory and print a summary.")
-  .action(async (template: string, project: string, options: { adapters: string; json?: boolean; demo?: boolean }) => {
-    const result = await generateLoopProject(buildGenerationOptions(project, template, options.adapters, options.demo ? "demo" : "project"));
+  .action(async (template: string, project: string, options: AdapterCliOptions & { json?: boolean; demo?: boolean }) => {
+    const result = await generateLoopProject(
+      buildGenerationOptions(project, template, options.adapters, options.demo ? "demo" : "project", buildAdapterConfigs(options))
+    );
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
       return;
@@ -82,11 +90,16 @@ program
   .command("preview")
   .argument("[project]", "project directory", ".")
   .option("--templates <items>", "comma-separated loop templates", "all")
-  .option("--adapters <items>", "comma-separated adapters", "codex,claude")
+  .option("--adapters <items>", "comma-separated adapters", DEFAULT_ADAPTER_IDS.join(","))
+  .option("--ollama-model <model>", "model name for the Ollama adapter")
+  .option("--ollama-base-url <url>", "base URL for the Ollama adapter")
+  .option("--openai-compatible-model <model>", "model name for the OpenAI-compatible adapter")
+  .option("--openai-compatible-base-url <url>", "base URL for the OpenAI-compatible adapter")
+  .option("--openai-compatible-api-key-env <name>", "environment variable name for an OpenAI-compatible API key")
   .option("--demo", "use the built-in demo project")
   .description("Preview the files loopgen would write.")
-  .action(async (project: string, options: { templates: string; adapters: string; demo?: boolean }) => {
-    const result = await generateLoopProject(buildGenerationOptions(project, options.templates, options.adapters, options.demo ? "demo" : "project"));
+  .action(async (project: string, options: AdapterCliOptions & { templates: string; demo?: boolean }) => {
+    const result = await generateLoopProject(buildGenerationOptions(project, options.templates, options.adapters, options.demo ? "demo" : "project", buildAdapterConfigs(options)));
     printGenerationSummary(result);
     console.log("\nDiff preview:\n");
     console.log(result.diff || "No changes.");
@@ -96,11 +109,16 @@ program
   .command("apply")
   .argument("[project]", "project directory", ".")
   .option("--templates <items>", "comma-separated loop templates", "all")
-  .option("--adapters <items>", "comma-separated adapters", "codex,claude")
+  .option("--adapters <items>", "comma-separated adapters", DEFAULT_ADAPTER_IDS.join(","))
+  .option("--ollama-model <model>", "model name for the Ollama adapter")
+  .option("--ollama-base-url <url>", "base URL for the Ollama adapter")
+  .option("--openai-compatible-model <model>", "model name for the OpenAI-compatible adapter")
+  .option("--openai-compatible-base-url <url>", "base URL for the OpenAI-compatible adapter")
+  .option("--openai-compatible-api-key-env <name>", "environment variable name for an OpenAI-compatible API key")
   .option("-y, --yes", "apply without an interactive confirmation")
   .description("Write generated loop files after confirmation.")
-  .action(async (project: string, options: { templates: string; adapters: string; yes?: boolean }) => {
-    const result = await generateLoopProject(buildGenerationOptions(project, options.templates, options.adapters));
+  .action(async (project: string, options: AdapterCliOptions & { templates: string; yes?: boolean }) => {
+    const result = await generateLoopProject(buildGenerationOptions(project, options.templates, options.adapters, "project", buildAdapterConfigs(options)));
     printGenerationSummary(result);
     console.log("\nDiff preview:\n");
     console.log(result.diff || "No changes.");
@@ -117,12 +135,28 @@ program.parseAsync(process.argv).catch((error: unknown) => {
   process.exitCode = 1;
 });
 
-function buildGenerationOptions(project: string, templates: string, adapters: string, experienceMode: ExperienceMode = "project"): GenerationOptions {
+interface AdapterCliOptions {
+  adapters: string;
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
+  openaiCompatibleModel?: string;
+  openaiCompatibleBaseUrl?: string;
+  openaiCompatibleApiKeyEnv?: string;
+}
+
+function buildGenerationOptions(
+  project: string,
+  templates: string,
+  adapters: string,
+  experienceMode: ExperienceMode = "project",
+  adapterConfigs?: AdapterConfigMap
+): GenerationOptions {
   return {
     projectRoot: path.resolve(project),
     experienceMode,
     selectedTemplates: parseTemplates(templates),
-    adapters: parseAdapters(adapters)
+    adapters: parseAdapters(adapters),
+    adapterConfigs
   };
 }
 
@@ -139,13 +173,23 @@ function parseTemplates(value: string): LoopTemplateId[] | undefined {
 }
 
 function parseAdapters(value: string): AdapterId[] {
-  const ids = value.split(",").map((item) => item.trim()).filter(Boolean) as AdapterId[];
-  for (const id of ids) {
-    if (id !== "codex" && id !== "claude") {
-      throw new Error(`Unknown adapter: ${id}`);
+  return parseAdapterIds(value);
+}
+
+function buildAdapterConfigs(options: AdapterCliOptions): AdapterConfigMap {
+  return {
+    ollama: {
+      preset: "ollama",
+      model: options.ollamaModel,
+      baseUrl: options.ollamaBaseUrl
+    },
+    "openai-compatible": {
+      preset: options.openaiCompatibleBaseUrl ? "custom-openai-compatible" : "lm-studio",
+      model: options.openaiCompatibleModel,
+      baseUrl: options.openaiCompatibleBaseUrl,
+      apiKeyEnv: options.openaiCompatibleApiKeyEnv
     }
-  }
-  return ids.length ? ids : ["codex", "claude"];
+  };
 }
 
 function printGenerationSummary(result: Awaited<ReturnType<typeof generateLoopProject>>) {

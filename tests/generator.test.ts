@@ -100,6 +100,103 @@ describe("generateLoopProject", () => {
     }
   });
 
+  test("generates Ollama adapter config and per-loop runbook", async () => {
+    const root = await tempProject({
+      "package.json": JSON.stringify({
+        name: "ollama-ready",
+        scripts: { test: "vitest run" }
+      }),
+      "package-lock.json": "{}",
+      "README.md": "# ollama-ready",
+      "src/main.test.ts": "test('ok', () => {})"
+    });
+
+    const result = await generateLoopProject({
+      projectRoot: root,
+      selectedTemplates: ["test-repair"],
+      adapters: ["ollama"],
+      adapterConfigs: {
+        ollama: {
+          model: "llama3.1",
+          baseUrl: "http://localhost:11434"
+        }
+      }
+    });
+
+    const paths = result.files.map((file) => file.path);
+    const config = result.files.find((file) => file.path === ".loopgen/adapters/ollama/config.json")?.content ?? "";
+    const runbook = result.files.find((file) => file.path === ".loopgen/adapters/ollama/test-repair.md")?.content ?? "";
+
+    expect(paths).toContain(".loopgen/adapters/ollama/config.json");
+    expect(paths).toContain(".loopgen/adapters/ollama/test-repair.md");
+    expect(config).toContain("\"adapter\": \"ollama\"");
+    expect(config).toContain("\"model\": \"llama3.1\"");
+    expect(runbook).toContain("/api/chat");
+    expect(runbook).toContain("\"stream\": false");
+    expect(paths.some((filePath) => filePath.startsWith(".codex/"))).toBe(false);
+  });
+
+  test("generates OpenAI-compatible adapter config and runbook without storing secrets", async () => {
+    const root = await tempProject({
+      "package.json": JSON.stringify({
+        name: "local-api",
+        scripts: { test: "vitest run" }
+      }),
+      "package-lock.json": "{}",
+      "README.md": "# local-api",
+      "src/main.test.ts": "test('ok', () => {})"
+    });
+
+    const result = await generateLoopProject({
+      projectRoot: root,
+      selectedTemplates: ["test-repair"],
+      adapters: ["openai-compatible"],
+      adapterConfigs: {
+        "openai-compatible": {
+          preset: "llama-cpp",
+          model: "qwen2.5-coder",
+          baseUrl: "http://localhost:8080/v1",
+          apiKeyEnv: "LOCAL_LLM_API_KEY"
+        }
+      }
+    });
+
+    const config = result.files.find((file) => file.path === ".loopgen/adapters/openai-compatible/config.json")?.content ?? "";
+    const runbook = result.files.find((file) => file.path === ".loopgen/adapters/openai-compatible/test-repair.md")?.content ?? "";
+
+    expect(config).toContain("\"adapter\": \"openai-compatible\"");
+    expect(config).toContain("\"apiKeyEnv\": \"LOCAL_LLM_API_KEY\"");
+    expect(config).not.toContain("sk-");
+    expect(runbook).toContain("/chat/completions");
+    expect(runbook).toContain("Authorization: Bearer $LOCAL_LLM_API_KEY");
+  });
+
+  test("missing local model names produce warnings and TODO text", async () => {
+    const root = await tempProject({
+      "package.json": JSON.stringify({
+        name: "missing-model",
+        scripts: { test: "vitest run" }
+      }),
+      "package-lock.json": "{}",
+      "README.md": "# missing-model",
+      "src/main.test.ts": "test('ok', () => {})"
+    });
+
+    const result = await generateLoopProject({
+      projectRoot: root,
+      selectedTemplates: ["test-repair"],
+      adapters: ["ollama"]
+    });
+
+    const config = result.files.find((file) => file.path === ".loopgen/adapters/ollama/config.json")?.content ?? "";
+    const runbook = result.files.find((file) => file.path === ".loopgen/adapters/ollama/test-repair.md")?.content ?? "";
+
+    expect(result.warnings.join("\n")).toContain("ollama needs a model name");
+    expect(config).toContain("TODO_MODEL");
+    expect(runbook).toContain("## TODO");
+    expect(runbook).toContain("ollama needs a model name");
+  });
+
   test("audience and category filters choose matching demo recommendations by default", async () => {
     const result = await generateLoopProject({
       experienceMode: "demo",
