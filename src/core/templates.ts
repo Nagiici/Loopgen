@@ -1,4 +1,5 @@
 import type {
+  AdapterConfigMap,
   CommandSet,
   LoopSpec,
   LoopTemplateId,
@@ -9,6 +10,7 @@ import type {
   TemplateDifficulty,
   WizardAnswers
 } from "./types.js";
+import { DEFAULT_ADAPTER_IDS, normalizeAdapterConfigs } from "./adapters.js";
 
 type CommandKey = Exclude<keyof CommandSet, "packageManager">;
 
@@ -615,7 +617,8 @@ export function defaultAnswers(scan: ProjectScan, overrides: Partial<WizardAnswe
 
   const defaults: WizardAnswers = {
     selectedTemplates: templateIds(),
-    adapters: ["codex", "claude"],
+    adapters: DEFAULT_ADAPTER_IDS,
+    adapterConfigs: normalizeAdapterConfigs(undefined),
     triggerCadence: "manual",
     acceptanceCriteria: "All configured verification commands pass and the generated state file explains what changed.",
     allowPrCreation: false,
@@ -625,7 +628,8 @@ export function defaultAnswers(scan: ProjectScan, overrides: Partial<WizardAnswe
 
   return {
     ...defaults,
-    ...definedOverrides(overrides)
+    ...definedOverrides(overrides),
+    adapterConfigs: normalizeAdapterConfigs((overrides.adapterConfigs as AdapterConfigMap | undefined) ?? defaults.adapterConfigs)
   };
 }
 

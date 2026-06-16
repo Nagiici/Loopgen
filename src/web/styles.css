@@ -417,7 +417,9 @@ p {
 .settings-grid input,
 .behavior-grid textarea,
 .behavior-grid select,
-.filter-row select {
+.filter-row select,
+.adapter-config input,
+.adapter-config select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -950,6 +952,23 @@ code {
   line-height: 1.45;
 }
 
+.adapter-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adapter-config-grid label {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  color: #3f4d50;
+  font-size: 12px;
+  font-weight: 640;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .behavior-grid {
   margin-top: 14px;
   display: grid;
@@ -1312,6 +1331,10 @@ code {
   }
 
   .adapter-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adapter-config-grid {
     grid-template-columns: 1fr;
   }
 

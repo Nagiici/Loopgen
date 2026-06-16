@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { applyGeneratedFiles } from "./core/fs-plan.js";
 import { demoProjectRoot, generateLoopProject } from "./core/generator.js";
 import { scanProject } from "./core/scanner.js";
-import type { AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId, TemplateAudience, TemplateCategory } from "./core/types.js";
+import type { AdapterConfig, AdapterConfigMap, AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId, TemplateAudience, TemplateCategory } from "./core/types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -169,6 +169,7 @@ function toGenerationOptions(body: Record<string, unknown>, defaultRoot: string)
     experienceMode: parseExperienceMode(body.experienceMode),
     selectedTemplates: stringArray(body.selectedTemplates) as LoopTemplateId[],
     adapters: stringArray(body.adapters) as AdapterId[],
+    adapterConfigs: adapterConfigMap(body.adapterConfigs),
     audienceFilter: typeof body.audienceFilter === "string" ? (body.audienceFilter as TemplateAudience) : undefined,
     categoryFilter: typeof body.categoryFilter === "string" ? (body.categoryFilter as TemplateCategory) : undefined,
     triggerCadence: typeof body.triggerCadence === "string" ? body.triggerCadence : undefined,
@@ -185,6 +186,26 @@ function parseExperienceMode(value: unknown): ExperienceMode {
 
 function stringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
+}
+
+function adapterConfigMap(value: unknown): AdapterConfigMap | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(([adapterId, rawConfig]) => {
+    const config = adapterConfig(rawConfig);
+    return config ? [[adapterId, config] as const] : [];
+  });
+  return Object.fromEntries(entries) as AdapterConfigMap;
+}
+
+function adapterConfig(value: unknown): AdapterConfig | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  return {
+    preset: typeof raw.preset === "string" ? (raw.preset as AdapterConfig["preset"]) : undefined,
+    baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : undefined,
+    model: typeof raw.model === "string" ? raw.model : undefined,
+    apiKeyEnv: typeof raw.apiKeyEnv === "string" ? raw.apiKeyEnv : undefined
+  };
 }
 
 async function serveStatic(response: ServerResponse, webDir: string, requestPath: string) {

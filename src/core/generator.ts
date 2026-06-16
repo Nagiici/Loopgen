@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { stringify } from "yaml";
 import { generateClaudeFiles } from "../adapters/claude.js";
 import { generateCodexFiles } from "../adapters/codex.js";
+import { generateLocalModelFiles, localModelWarnings } from "../adapters/local-model.js";
+import { DEFAULT_ADAPTER_IDS, normalizeAdapterConfigs } from "./adapters.js";
 import { createPreviewDiff } from "./diff.js";
 import { defaultAnswers, createLoopSpec, TEMPLATE_DEFINITIONS, templateIds } from "./templates.js";
 import { scanProject } from "./scanner.js";
@@ -12,12 +14,14 @@ export async function generateLoopProject(options: GenerationOptions): Promise<G
   const experienceMode = options.experienceMode ?? "project";
   const projectRoot = resolveProjectRoot(options, experienceMode);
   const scan = await scanProject(projectRoot);
-  const adapters = options.adapters?.length ? unique(options.adapters) : (["codex", "claude"] as AdapterId[]);
+  const adapters = options.adapters?.length ? unique(options.adapters) : DEFAULT_ADAPTER_IDS;
+  const adapterConfigs = normalizeAdapterConfigs(options.adapterConfigs);
   const selectedTemplates = options.selectedTemplates?.length
     ? unique(options.selectedTemplates)
     : defaultTemplateSelection(options, experienceMode);
   const answers = defaultAnswers(scan, {
     adapters,
+    adapterConfigs,
     selectedTemplates,
     triggerCadence: options.triggerCadence ?? "manual",
     acceptanceCriteria: options.acceptanceCriteria,
@@ -45,11 +49,21 @@ export async function generateLoopProject(options: GenerationOptions): Promise<G
       content: renderStateFile(loop.id, loop.title)
     })),
     ...(answers.adapters.includes("codex") ? generateCodexFiles(scan, loops) : []),
-    ...(answers.adapters.includes("claude") ? generateClaudeFiles(scan, loops) : [])
+    ...(answers.adapters.includes("claude") ? generateClaudeFiles(scan, loops) : []),
+    ...(answers.adapters.includes("ollama")
+      ? generateLocalModelFiles(scan, loops, { adapterId: "ollama", config: answers.adapterConfigs.ollama ?? {} })
+      : []),
+    ...(answers.adapters.includes("openai-compatible")
+      ? generateLocalModelFiles(scan, loops, {
+          adapterId: "openai-compatible",
+          config: answers.adapterConfigs["openai-compatible"] ?? {}
+        })
+      : [])
   ]);
 
   const warnings = [
     ...scan.warnings,
+    ...answers.adapters.flatMap((adapter) => localModelWarnings(adapter, answers.adapterConfigs[adapter])),
     ...loops
       .filter((loop) => loop.verification.requiresHumanCommandDefinition)
       .map((loop) => `${loop.id} needs a real verification command before automated execution.`)
@@ -197,12 +211,13 @@ function sortFiles(files: GeneratedFile[]) {
 
 function fileSortKey(filePath: string) {
   if (filePath.startsWith(".loopgen/playbooks/")) return `0:${filePath}`;
-  if (filePath === ".loopgen/README.md") return `1:${filePath}`;
-  if (filePath === ".loopgen/loopgen.loop.yaml") return `2:${filePath}`;
-  if (filePath.startsWith(".loopgen/state/")) return `3:${filePath}`;
-  if (filePath.startsWith(".codex/")) return `4:${filePath}`;
-  if (filePath.startsWith(".claude/")) return `5:${filePath}`;
-  return `6:${filePath}`;
+  if (filePath.startsWith(".loopgen/adapters/")) return `1:${filePath}`;
+  if (filePath === ".loopgen/README.md") return `2:${filePath}`;
+  if (filePath === ".loopgen/loopgen.loop.yaml") return `3:${filePath}`;
+  if (filePath.startsWith(".loopgen/state/")) return `4:${filePath}`;
+  if (filePath.startsWith(".codex/")) return `5:${filePath}`;
+  if (filePath.startsWith(".claude/")) return `6:${filePath}`;
+  return `7:${filePath}`;
 }
 
 function unique<T>(items: T[]) {

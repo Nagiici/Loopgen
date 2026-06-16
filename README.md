@@ -18,6 +18,7 @@
 - 通用 `.loopgen/playbooks/*.md`：不依赖任何特定 AI 工具，适合先理解 loop engineering 的工作方式。
 - Codex 配置：`.codex/skills/*`、`.codex/automations/*`、checker agent。
 - Claude 配置：`.claude/skills/*`、`.claude/loops/*`、checker notes。
+- 本地/开源模型适配器：Ollama 与 OpenAI-compatible server（例如 LM Studio、llama.cpp）的配置和 runbook。
 - 状态记录：`.loopgen/state/*.md`，用于记录每次循环尝试、结果和阻塞点。
 
 核心目标是降低使用门槛：你可以先用内置 demo 项目预览效果，不需要接入真实项目，也不会写入真实项目文件。
@@ -68,6 +69,27 @@ npm run loopgen -- scan .
 npm run loopgen -- preview . --templates test-repair --adapters codex,claude
 ```
 
+生成 Ollama runbook：
+
+```bash
+npm run loopgen -- preview . \
+  --templates test-repair \
+  --adapters ollama \
+  --ollama-model llama3.1
+```
+
+生成 LM Studio 或 llama.cpp 等 OpenAI-compatible runbook：
+
+```bash
+npm run loopgen -- preview . \
+  --templates test-repair \
+  --adapters openai-compatible \
+  --openai-compatible-model qwen2.5-coder \
+  --openai-compatible-base-url http://localhost:1234/v1
+```
+
+`loopgen` 只生成配置和运行手册，不会自动调用本地模型。API key 只通过环境变量名引用，不会把密钥值写入文件。
+
 #### 5. 确认后写入文件
 
 ```bash
@@ -88,10 +110,27 @@ npm run loopgen -- scan --demo
 npm run loopgen -- scan [project] --json
 npm run loopgen -- preview --demo
 npm run loopgen -- preview [project] --templates all --adapters codex,claude
+npm run loopgen -- preview [project] --templates test-repair --adapters ollama --ollama-model llama3.1
+npm run loopgen -- preview [project] --templates test-repair --adapters openai-compatible --openai-compatible-model qwen2.5-coder
 npm run loopgen -- apply [project] --templates all --adapters codex,claude
 ```
 
 `apply` 会先展示 diff。没有 `--yes` 时，它会要求你确认后才写入文件。
+
+可用 adapter：
+
+- `codex`
+- `claude`
+- `ollama`
+- `openai-compatible`
+
+本地模型参数：
+
+- `--ollama-model`
+- `--ollama-base-url`，默认 `http://localhost:11434`
+- `--openai-compatible-model`
+- `--openai-compatible-base-url`，常见值包括 LM Studio 的 `http://localhost:1234/v1` 和 llama.cpp 的 `http://localhost:8080/v1`
+- `--openai-compatible-api-key-env`，只填写环境变量名，例如 `LOCAL_LLM_API_KEY`
 
 ### 模板场景
 
@@ -112,12 +151,17 @@ npm run loopgen -- apply [project] --templates all --adapters codex,claude
 - `.loopgen/state/*.md`：循环状态、尝试记录和阻塞点。
 - `.codex/skills/*`、`.codex/automations/*`、`.codex/agents/*`：Codex 适配输出。
 - `.claude/skills/*`、`.claude/loops/*`、`.claude/agents/*`：Claude 适配输出。
+- `.loopgen/adapters/ollama/config.json` 与 `.loopgen/adapters/ollama/*.md`：Ollama 本地运行时配置和 runbook。
+- `.loopgen/adapters/openai-compatible/config.json` 与 `.loopgen/adapters/openai-compatible/*.md`：OpenAI-compatible server 配置和 runbook。
 
 默认安全策略包括：有限迭代、maker/checker 分离、必须验证、禁止读取敏感路径、状态文件记录。
+
+本地模型 runbook 会包含 loop 目标、上下文来源、验证命令、停止条件、状态文件路径、模型提示词模板，以及对应运行时的 `curl` 示例。
 
 ### 故障排查
 
 - 如果没有推断出验证命令，生成的 loop 会进入 draft 模式，并带有 TODO 验证命令。
+- 如果选择了 Ollama 或 OpenAI-compatible adapter 但没有填写模型名，`loopgen` 仍会生成文件，并在 config 和 runbook 中留下 warning/TODO。
 - 如果 Web 向导提示缺少静态资源，请先运行 `npm run build`。
 - Demo 模式只能预览，不能写入文件；需要写入时请切换到 **Use my project**。
 - 如果 loop 尝试读取 `.env`、生产密钥或 credential 文件，应立即停止并视为安全违规。
@@ -138,6 +182,7 @@ npm run loopgen -- apply [project] --templates all --adapters codex,claude
 - Tool-agnostic `.loopgen/playbooks/*.md` files for anyone who wants to understand the loop before using an agent tool.
 - Codex outputs: `.codex/skills/*`, `.codex/automations/*`, and checker agents.
 - Claude outputs: `.claude/skills/*`, `.claude/loops/*`, and checker notes.
+- Local/open-source model adapters: config and runbooks for Ollama and OpenAI-compatible servers such as LM Studio and llama.cpp.
 - State files: `.loopgen/state/*.md` for recording attempts, outcomes and blockers.
 
 The product goal is low-friction adoption. You can start with the built-in demo project, preview generated loops, and learn the value of loop engineering without writing to your real project.
@@ -188,6 +233,27 @@ npm run loopgen -- scan .
 npm run loopgen -- preview . --templates test-repair --adapters codex,claude
 ```
 
+Generate Ollama runbooks:
+
+```bash
+npm run loopgen -- preview . \
+  --templates test-repair \
+  --adapters ollama \
+  --ollama-model llama3.1
+```
+
+Generate LM Studio, llama.cpp, or other OpenAI-compatible runbooks:
+
+```bash
+npm run loopgen -- preview . \
+  --templates test-repair \
+  --adapters openai-compatible \
+  --openai-compatible-model qwen2.5-coder \
+  --openai-compatible-base-url http://localhost:1234/v1
+```
+
+`loopgen` only generates configuration and runbooks. It does not execute local models automatically. API keys are referenced by environment variable name only; secret values are never written into generated files.
+
 #### 5. Apply after review
 
 ```bash
@@ -208,10 +274,27 @@ npm run loopgen -- scan --demo
 npm run loopgen -- scan [project] --json
 npm run loopgen -- preview --demo
 npm run loopgen -- preview [project] --templates all --adapters codex,claude
+npm run loopgen -- preview [project] --templates test-repair --adapters ollama --ollama-model llama3.1
+npm run loopgen -- preview [project] --templates test-repair --adapters openai-compatible --openai-compatible-model qwen2.5-coder
 npm run loopgen -- apply [project] --templates all --adapters codex,claude
 ```
 
 `apply` always shows a diff first. Without `--yes`, it asks for confirmation before writing files.
+
+Available adapters:
+
+- `codex`
+- `claude`
+- `ollama`
+- `openai-compatible`
+
+Local model flags:
+
+- `--ollama-model`
+- `--ollama-base-url`, defaulting to `http://localhost:11434`
+- `--openai-compatible-model`
+- `--openai-compatible-base-url`, commonly `http://localhost:1234/v1` for LM Studio or `http://localhost:8080/v1` for llama.cpp
+- `--openai-compatible-api-key-env`, an environment variable name such as `LOCAL_LLM_API_KEY`
 
 ### Template Library
 
@@ -232,12 +315,17 @@ The current library covers five categories:
 - `.loopgen/state/*.md`: attempts, outcomes and blockers.
 - `.codex/skills/*`, `.codex/automations/*`, `.codex/agents/*`: Codex-oriented outputs.
 - `.claude/skills/*`, `.claude/loops/*`, `.claude/agents/*`: Claude-oriented outputs.
+- `.loopgen/adapters/ollama/config.json` and `.loopgen/adapters/ollama/*.md`: Ollama runtime config and runbooks.
+- `.loopgen/adapters/openai-compatible/config.json` and `.loopgen/adapters/openai-compatible/*.md`: OpenAI-compatible runtime config and runbooks.
 
 Generated loops include safety defaults: bounded iterations, maker/checker separation, required verification, forbidden secret paths and state-file logging.
+
+Local model runbooks include the loop goal, context sources, verification commands, stop criteria, state-file path, a model prompt template and a runtime-specific `curl` example.
 
 ### Troubleshooting
 
 - If no verification command is inferred, generated loops stay in draft mode with a TODO verification command.
+- If you select Ollama or OpenAI-compatible adapters without a model name, `loopgen` still generates files and adds warnings/TODOs to the config and runbook.
 - If the Web wizard says assets are missing, run `npm run build`.
 - Demo mode is preview-only. Switch to **Use my project** before applying files.
 - If a loop tries to read `.env`, production secrets or credential files, stop and treat it as a safety violation.
