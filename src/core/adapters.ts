@@ -4,6 +4,42 @@ export const DEFAULT_ADAPTER_IDS: AdapterId[] = ["codex", "claude"];
 
 export const ADAPTER_DEFINITIONS: AdapterDefinition[] = [
   {
+    id: "agents-md",
+    name: "AGENTS.md",
+    vendor: "Cross-tool standard",
+    description: "One AGENTS.md read by Claude Code, Codex, Cursor, Copilot, Gemini CLI, Aider, and more",
+    outputPath: "AGENTS.md",
+    files: ["AGENTS.md"],
+    capabilities: ["Universal agent instructions", "Per-loop sections", "Safety rules"],
+    prBehavior: "Describes loop behavior; does not create PRs by itself.",
+    safetyNotes: ["Portable across most AI coding agents.", "Forbidden paths are listed per loop."],
+    configurable: false
+  },
+  {
+    id: "cursor",
+    name: "Cursor",
+    vendor: "Cursor",
+    description: "Project rules as .cursor/rules/*.mdc files",
+    outputPath: ".cursor/rules/",
+    files: ["loopgen-*.mdc"],
+    capabilities: ["Cursor project rule", "MDC frontmatter", "Per-loop guardrails"],
+    prBehavior: "Guides Cursor agents; does not create PRs by itself.",
+    safetyNotes: ["Each rule lists forbidden paths and iteration limits."],
+    configurable: false
+  },
+  {
+    id: "windsurf",
+    name: "Windsurf",
+    vendor: "Codeium",
+    description: "A .windsurfrules file for Windsurf/Cascade",
+    outputPath: ".windsurfrules",
+    files: [".windsurfrules"],
+    capabilities: ["Windsurf rules", "Global guardrails", "Per-loop sections"],
+    prBehavior: "Guides Windsurf agents; does not create PRs by itself.",
+    safetyNotes: ["Includes global and per-loop safety guardrails."],
+    configurable: false
+  },
+  {
     id: "codex",
     name: "Codex",
     vendor: "OpenAI",

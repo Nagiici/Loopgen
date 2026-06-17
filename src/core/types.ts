@@ -1,4 +1,4 @@
-export type AdapterId = "codex" | "claude" | "ollama" | "openai-compatible";
+export type AdapterId = "agents-md" | "codex" | "claude" | "cursor" | "windsurf" | "ollama" | "openai-compatible";
 
 export type AdapterPreset = "ollama" | "lm-studio" | "llama-cpp" | "custom-openai-compatible";
 

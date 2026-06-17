@@ -1,10 +1,13 @@
 {
   "name": "loopgen",
   "version": "0.1.0",
-  "description": "Local-first loop engineering generator for software teams.",
+  "description": "Generate bounded, verifiable AI agent configs for Codex, Claude, Cursor, and local models — with safety rails baked in.",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
-    "loopgen": "./dist/cli.js"
+    "loopgen": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -19,16 +22,32 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "start": "node dist/cli.js init --no-open",
-    "loopgen": "node dist/cli.js"
+    "loopgen": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "loop-engineering",
-    "codex",
-    "claude",
     "ai-agents",
-    "developer-tools"
+    "agents-md",
+    "codex",
+    "claude-code",
+    "cursor",
+    "developer-tools",
+    "cli",
+    "typescript"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nagiici/Loopgen.git"
+  },
+  "homepage": "https://github.com/Nagiici/Loopgen#readme",
+  "bugs": {
+    "url": "https://github.com/Nagiici/Loopgen/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "commander": "^14.0.2",
     "lucide-react": "^0.556.0",

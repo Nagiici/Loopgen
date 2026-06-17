@@ -11,6 +11,10 @@ describe("adapter registry", () => {
     ]);
   });
 
+  test("accepts the cross-tool adapter ids", () => {
+    expect(parseAdapterIds("agents-md,cursor,windsurf")).toEqual(["agents-md", "cursor", "windsurf"]);
+  });
+
   test("falls back to default adapters for an empty CLI value", () => {
     expect(parseAdapterIds("")).toEqual(DEFAULT_ADAPTER_IDS);
   });

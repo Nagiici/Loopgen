@@ -28,8 +28,40 @@
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    background: #0f1413;
+    color: #e7edec;
+    --bg: #0f1413;
+    --surface: #161d1c;
+    --surface-2: #1b2322;
+    --surface-3: #202a29;
+    --line: #2a3433;
+    --line-strong: #3a4644;
+    --muted: #9aa7a8;
+    --text: #e7edec;
+    --teal: #2fb6b0;
+    --teal-dark: #23938e;
+    --teal-soft: #10302e;
+    --green: #3fae62;
+    --green-soft: #11271a;
+    --amber: #e0992f;
+    --amber-soft: #2e2410;
+    --red: #f06b6a;
+    --red-soft: #2e1716;
+    --shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+  }
+}
+
 * {
   box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 body {

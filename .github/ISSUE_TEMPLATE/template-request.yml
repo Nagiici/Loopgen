@@ -1,0 +1,45 @@
+name: Template request
+description: Suggest a new loop template (a reusable, bounded scenario).
+title: "[template] <short name>"
+labels: ["template-request"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Template name
+      placeholder: e.g. Security audit
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - maintenance
+        - delivery
+        - quality
+        - knowledge
+        - cross-functional
+    validations:
+      required: true
+  - type: input
+    id: audience
+    attributes:
+      label: Target audience
+      placeholder: developer, qa, product, ops, data, solutions
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Example use case
+      description: When would someone run this loop, and what should it accomplish?
+    validations:
+      required: true
+  - type: input
+    id: verification
+    attributes:
+      label: Verification command(s)
+      description: How does the loop prove success? (e.g. `npm run test`)
+    validations:
+      required: true
