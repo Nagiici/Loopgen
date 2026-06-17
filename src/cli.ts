@@ -42,7 +42,7 @@ const program = new Command();
 
 program
   .name("loopgen")
-  .description("Generate bounded, verifiable AI agent configs for Codex, Claude, Cursor, and local models — with safety rails baked in.")
+  .description("Run your AI's coding loop and prove its work actually passed — real verification, a tamper-evident audit, and a CI gate.")
   .version(version);
 
 program

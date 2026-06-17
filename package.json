@@ -1,7 +1,7 @@
 {
   "name": "loopgen",
   "version": "0.6.1",
-  "description": "Generate bounded, verifiable AI agent configs for Codex, Claude, Cursor, and local models — with safety rails baked in.",
+  "description": "Run your AI's coding loop and prove its work actually passed — real verification, a tamper-evident audit, and a CI gate. Local-first.",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -26,8 +26,12 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "loop-engineering",
     "ai-agents",
+    "verification",
+    "audit",
+    "ci",
+    "governance",
+    "loop-engineering",
     "agents-md",
     "codex",
     "claude-code",
