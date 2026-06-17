@@ -25,7 +25,7 @@ npx loopgen run test-repair  # run the loop, verify it, and leave proof it passe
 - 🏠 **Local-first & open source (MIT)** — no telemetry, no cloud; drives only your local models; API keys
   are referenced by env-var name only.
 
-<!-- TODO: add a 12s asciinema of `loopgen run` going PASS/FAIL with the proof report. -->
+![loopgen run — execute a loop, verify it, and prove it passed (or fail on a broken test / forbidden secret)](https://raw.githubusercontent.com/Nagiici/Loopgen/main/docs/demo.gif)
 
 📖 中文说明见 [中文](#中文) · English documentation [below](#english).
 
