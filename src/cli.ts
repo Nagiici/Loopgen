@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
@@ -29,12 +30,15 @@ function looksLikeProject(dir: string): boolean {
   return PROJECT_MANIFESTS.some((file) => existsSync(path.join(dir, file)));
 }
 
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json") as { version: string };
+
 const program = new Command();
 
 program
   .name("loopgen")
   .description("Generate bounded, verifiable AI agent configs for Codex, Claude, Cursor, and local models — with safety rails baked in.")
-  .version("0.1.0");
+  .version(version);
 
 program
   .command("init")
