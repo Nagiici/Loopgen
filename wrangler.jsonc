@@ -1,8 +1,0 @@
-{
-  // Cloudflare config: serve the static marketing site in ./site (NOT the wizard build in dist-web).
-  "name": "loopgen",
-  "compatibility_date": "2026-06-01",
-  "assets": {
-    "directory": "./site"
-  }
-}
