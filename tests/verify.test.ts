@@ -18,11 +18,15 @@ describe("runVerification", () => {
     expect(result.results[0].exitCode).toBe(1);
   });
 
-  test("timeout marks timedOut and fails the gate", async () => {
-    const result = await runVerification(['node -e "setTimeout(function(){}, 99999)"'], { cwd, timeoutMs: 200 });
-    expect(result.results[0].timedOut).toBe(true);
-    expect(result.passed).toBe(false);
-  });
+  test(
+    "timeout marks timedOut and fails the gate",
+    async () => {
+      const result = await runVerification(['node -e "setTimeout(function(){}, 99999)"'], { cwd, timeoutMs: 200 });
+      expect(result.results[0].timedOut).toBe(true);
+      expect(result.passed).toBe(false);
+    },
+    15_000
+  );
 
   test("empty command list does not pass", async () => {
     const result = await runVerification([], { cwd, timeoutMs: 1000 });

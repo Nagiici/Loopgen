@@ -29,7 +29,19 @@ export async function runVerification(commands: string[], options: VerifyOptions
 function runOne(command: string, options: VerifyOptions): Promise<CommandRunResult> {
   return new Promise((resolve) => {
     const start = Date.now();
-    const child = spawn(command, { cwd: options.cwd, shell: true });
+    // detached on POSIX so the shell and its children share a process group we can kill together —
+    // otherwise killing the shell leaves grandchildren holding the stdio pipes open and `close` never fires.
+    const posix = process.platform !== "win32";
+    const child = spawn(command, { cwd: options.cwd, shell: true, detached: posix });
+    const killTree = (signal: NodeJS.Signals) => {
+      if (child.pid == null) return;
+      try {
+        if (posix) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch {
+        // process group already gone
+      }
+    };
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -44,8 +56,8 @@ function runOne(command: string, options: VerifyOptions): Promise<CommandRunResu
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS).unref();
+      killTree("SIGTERM");
+      setTimeout(() => killTree("SIGKILL"), KILL_GRACE_MS).unref();
     }, options.timeoutMs);
 
     const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
