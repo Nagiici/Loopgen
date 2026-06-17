@@ -23,7 +23,9 @@
     "test": "vitest run",
     "start": "node dist/cli.js init --no-open",
     "loopgen": "node dist/cli.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "deploy": "npm run build && wrangler deploy",
+    "preview": "npm run build && wrangler dev"
   },
   "keywords": [
     "ai-agents",
@@ -60,6 +62,7 @@
     "yaml": "^2.8.2"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.41.0",
     "@fontsource-variable/fraunces": "^5.2.9",
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "@fontsource/ibm-plex-mono": "^5.2.7",
@@ -69,6 +72,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "typescript": "^5.9.3",
     "vite": "^8.0.16",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.15",
+    "wrangler": "^4.101.0"
   }
 }
