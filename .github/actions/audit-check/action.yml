@@ -1,0 +1,69 @@
+name: "loopgen audit check"
+description: "Gate a PR/merge on loopgen audit evidence: required loops passed, no forbidden-path violations, intact hash chain."
+author: "loopgen"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  project:
+    description: "Project directory containing .loopgen/audit.jsonl"
+    required: false
+    default: "."
+  require:
+    description: "Comma-separated loop ids that must have a passing run"
+    required: false
+    default: ""
+  since:
+    description: "Only consider runs at/after this ISO timestamp"
+    required: false
+    default: ""
+  require-no-violations:
+    description: "Fail if any run modified forbidden paths"
+    required: false
+    default: "false"
+  require-chain:
+    description: "Fail if the audit hash chain is broken (tamper check)"
+    required: false
+    default: "true"
+  version:
+    description: "loopgen version to use (npm version or dist-tag)"
+    required: false
+    default: "latest"
+  node-version:
+    description: "Node.js version for the runner"
+    required: false
+    default: "20"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+    - shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        REQUIRE: ${{ inputs.require }}
+        SINCE: ${{ inputs.since }}
+        NO_VIOLATIONS: ${{ inputs.require-no-violations }}
+        REQUIRE_CHAIN: ${{ inputs.require-chain }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        npm install -g "loopgen@${VERSION}"
+
+        # Render the governance rollup into the GitHub Actions job summary (a mini dashboard).
+        if loopgen audit aggregate "$PROJECT" --report "${RUNNER_TEMP}/loopgen-gov.md" >/dev/null 2>&1; then
+          { echo "## loopgen governance"; echo; cat "${RUNNER_TEMP}/loopgen-gov.md"; } >> "$GITHUB_STEP_SUMMARY" || true
+        fi
+
+        # Build the policy gate command from inputs.
+        args=(audit check "$PROJECT")
+        if [ -n "$REQUIRE" ]; then args+=(--require "$REQUIRE"); fi
+        if [ -n "$SINCE" ]; then args+=(--since "$SINCE"); fi
+        if [ "$NO_VIOLATIONS" = "true" ]; then args+=(--require-no-violations); fi
+        if [ "$REQUIRE_CHAIN" = "true" ]; then args+=(--require-chain); fi
+
+        # Exits non-zero if the policy is not satisfied → the job (and PR) fails.
+        loopgen "${args[@]}"

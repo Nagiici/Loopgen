@@ -197,6 +197,16 @@ npm run loopgen -- audit check --require test-repair --require-no-violations --r
 (直接打开即可,无需服务器)和一份 markdown 报告。`check` 是**合并闸门**:当某个必需 loop 没有通过记录、
 有改动碰了禁止路径、或链断了,就以非 0 退出 —— 接进 CI 即可在「证据缺失/不足」时挡住合并。
 
+也有现成的 GitHub Action(会把治理汇总写进 job summary,并在策略违规时让 job 失败):
+
+```yaml
+- uses: Nagiici/Loopgen/.github/actions/audit-check@v0.6.0
+  with:
+    require: test-repair,ci-failure-repair
+    require-no-violations: "true"
+    require-chain: "true"
+```
+
 可用 adapter：
 
 - `agents-md`：通用 `AGENTS.md`，可被 Claude Code、Codex、Cursor、Copilot、Gemini CLI、Aider 等读取
@@ -468,6 +478,17 @@ npm run loopgen -- audit check --require test-repair --require-no-violations --r
 a self-contained **HTML governance dashboard** (just open it — no server) plus a markdown report. `check` is
 the **merge gate**: it exits non-zero if a required loop has no passing run, a run touched forbidden paths, or
 the chain is broken — wire it into CI to block merges on missing or insufficient proof.
+
+There's a ready-made GitHub Action (it renders the governance rollup into the job summary and fails the job
+on policy violations):
+
+```yaml
+- uses: Nagiici/Loopgen/.github/actions/audit-check@v0.6.0
+  with:
+    require: test-repair,ci-failure-repair
+    require-no-violations: "true"
+    require-chain: "true"
+```
 
 Available adapters:
 
