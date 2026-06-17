@@ -3,7 +3,6 @@ import {
   Bot,
   Check,
   ChevronDown,
-  Code2,
   FileCode2,
   FlaskConical,
   FolderGit2,
@@ -12,15 +11,17 @@ import {
   Hammer,
   History,
   Loader2,
+  Moon,
   PackageOpen,
   Play,
   RefreshCw,
   Settings,
   ShieldCheck,
   Sparkles,
+  Sun,
   Upload
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   AdapterConfig,
   AdapterConfigMap,
@@ -86,6 +87,17 @@ export function App() {
   const [preview, setPreview] = useState<GenerationResult | undefined>();
   const [status, setStatus] = useState<StatusState>({ kind: "idle", message: "Ready" });
   const [activeView, setActiveView] = useState<WorkspaceView>("configure");
+  const [step, setStep] = useState<WizardStep>(1);
+  const [theme, setThemeState] = useState<"light" | "dark">(() => {
+    if (typeof document !== "undefined") {
+      const current = document.documentElement.dataset.theme;
+      if (current === "light" || current === "dark") return current;
+    }
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  });
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
@@ -101,6 +113,22 @@ export function App() {
       );
     }
   }, [scan, allowedCommands]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  function toggleTheme() {
+    setThemeState((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      try {
+        window.localStorage.setItem("loopgen-theme", next);
+      } catch {
+        // ignore storage failures (private mode, etc.)
+      }
+      return next;
+    });
+  }
 
   const projectSummary = useMemo(() => {
     if (!scan) return [];
@@ -306,332 +334,263 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar" aria-label="Main navigation">
-        <div className="brand">
-          <div className="brand-mark">
-            <Sparkles size={18} strokeWidth={2.4} />
-          </div>
-          <strong>loopgen</strong>
-        </div>
-
-        <div className="project-card">
-          <FolderGit2 size={17} />
-          <div>
-            <span>Project</span>
-            <strong>{scan?.projectName ?? "Current project"}</strong>
-          </div>
-        </div>
-
-        <nav className="side-nav" aria-label="Workspace">
-          <button
-            className={`side-nav-item ${activeView === "configure" ? "active" : ""}`}
-            type="button"
-            aria-current={activeView === "configure" ? "page" : undefined}
-            onClick={() => setActiveView("configure")}
-            data-testid="nav-configure"
-          >
-            <Code2 size={17} />
-            Configure
-          </button>
-          <button
-            className={`side-nav-item ${activeView === "history" ? "active" : ""}`}
-            type="button"
-            aria-current={activeView === "history" ? "page" : undefined}
-            onClick={() => setActiveView("history")}
-            data-testid="nav-history"
-          >
-            <History size={17} />
-            History
-          </button>
-          <button
-            className={`side-nav-item ${activeView === "settings" ? "active" : ""}`}
-            type="button"
-            aria-current={activeView === "settings" ? "page" : undefined}
-            onClick={() => setActiveView("settings")}
-            data-testid="nav-settings"
-          >
-            <Settings size={17} />
-            Settings
-          </button>
-        </nav>
-
-        <div className="sidebar-footer">
-          <span className="daemon-dot" />
-          Local daemon active
-        </div>
-      </aside>
-
-      <main className="workspace">
+    <div className="az-shell">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+      <Masthead activeView={activeView} onSelectView={setActiveView} theme={theme} onToggleTheme={toggleTheme} />
+      <main id="main" className="az-main">
         {activeView === "configure" ? (
-        <section className="content-grid">
-          <div className="main-column">
-            <section className="tool-panel experience-panel" aria-labelledby="experience-heading">
-              <SectionTitle
-                id="experience-heading"
-                title="Experience"
-                description="Choose whether to preview loop engineering with the built-in demo or generate files for a real project."
-                count={modeLabel}
-              />
-              <div className="mode-grid">
-                <ModeButton
-                  icon={Sparkles}
-                  title="Try demo"
-                  description="Use the built-in demo project and preview loop outputs without writing files."
-                  active={experienceMode === "demo"}
-                  onClick={() => chooseExperienceMode("demo")}
-                />
-                <ModeButton
-                  icon={FolderGit2}
-                  title="Use my project"
-                  description="Scan a local project, select scenarios, preview the diff, then apply generated files."
-                  active={experienceMode === "project"}
-                  onClick={() => chooseExperienceMode("project")}
-                />
-              </div>
-            </section>
-
-            <section className="tool-panel scan-panel" aria-labelledby="project-scan-heading">
-              <div className="panel-kicker">{experienceMode === "demo" ? "Demo project" : "Project scan"}</div>
-              <div className="scan-bar">
-                <div>
-                  <h1 id="project-scan-heading">{experienceMode === "demo" ? "Built-in demo" : "Project scan"}</h1>
-                  <p>{scan ? `Scanned ${new Date(scan.detectedAt).toLocaleTimeString()}` : "Scan before generating loops."}</p>
-                </div>
-                <StatusPill status={status} />
-              </div>
-              <div className="path-row">
-                <label>
-                  {experienceMode === "demo" ? "Demo fixture path" : "Project path"}
-                  <input
-                    aria-label="Project path"
-                    value={projectPath}
-                    placeholder="Current working directory"
-                    disabled={experienceMode === "demo"}
-                    onChange={(event) => setProjectPath(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="secondary-button compact-button"
-                  type="button"
-                  onClick={chooseProjectFolder}
-                  disabled={experienceMode === "demo" || status.kind === "loading"}
-                  data-testid="choose-folder"
-                  title={experienceMode === "demo" ? "Switch to Use my project to choose a folder" : "Choose a local project folder"}
+          <div className="configure-grid">
+            <ContentsStepper step={step} onSelectStep={setStep} />
+            <div className="spread-wrap">
+              {step === 1 ? (
+                <Spread
+                  numeral="01"
+                  kicker="Experience"
+                  headingId="step-experience"
+                  title="Choose your starting point"
+                  standfirst="Preview loop engineering with the built-in demo, or generate files for a real project."
                 >
-                  <FolderOpen size={16} />
-                  Choose folder
-                </button>
-                <button className="secondary-button compact-button" type="button" onClick={() => runScan()}>
-                  {status.kind === "loading" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-                  {experienceMode === "demo" ? "Reload demo" : "Scan project"}
-                </button>
-              </div>
-              <div className="scan-layout">
-                <dl className="scan-table">
-                  {projectSummary.map(([label, value]) => (
-                    <div key={label}>
-                      <dt>{label}</dt>
-                      <dd>{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <div className="metrics-list" aria-label="Project summary">
-                  <Metric icon={FileCode2} label="Source files" value={scan?.files.source ?? 0} />
-                  <Metric icon={FlaskConical} label="Test files" value={scan?.files.tests ?? 0} />
-                  <Metric icon={Settings} label="Config files" value={scan?.files.configs ?? 0} />
-                  <Metric icon={PackageOpen} label="Scripts" value={scan ? Object.keys(scan.scripts).length : 0} />
-                </div>
-              </div>
-            </section>
-
-            <section className="tool-panel" aria-labelledby="scenario-templates-heading">
-              <SectionTitle
-                id="scenario-templates-heading"
-                title="Scenario templates"
-                description="Filter by role or category, then select the loop playbooks and agent configs to generate."
-                count={`${selectedTemplates.length}/${TEMPLATE_DEFINITIONS.length}`}
-              />
-              <div className="filter-row">
-                <label>
-                  Category
-                  <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}>
-                    <option value="all">All categories</option>
-                    {TEMPLATE_CATEGORIES.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Audience
-                  <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value as AudienceFilter)}>
-                    <option value="all">All audiences</option>
-                    {TEMPLATE_AUDIENCES.map((audience) => (
-                      <option key={audience.id} value={audience.id}>
-                        {audience.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button className="secondary-button compact-button" type="button" onClick={selectRecommendedTemplates}>
-                  <ShieldCheck size={16} />
-                  Use recommended
-                </button>
-              </div>
-              {visibleTemplates.length ? (
-                <div className="template-list">
-                  {visibleTemplates.map((template) => (
-                  <TemplateRow
-                    key={template.id}
-                    template={template}
-                    checked={selectedTemplates.includes(template.id)}
-                    onChange={(checked) => toggleTemplate(template.id, checked, setSelectedTemplates)}
-                  />
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state compact-empty">
-                  <FileCode2 size={23} />
-                  <strong>No templates match</strong>
-                  <span>Change the filters or use the recommended set.</span>
-                </div>
-              )}
-            </section>
-
-            <section className="tool-panel" aria-labelledby="adapters-heading">
-              <SectionTitle
-                id="adapters-heading"
-                title="Adapters"
-                description="Choose which agent configuration files loopgen should emit."
-                count={`${adapters.length}/${ADAPTER_DEFINITIONS.length}`}
-              />
-              <div className="adapter-list">
-                {ADAPTER_DEFINITIONS.map((adapter) => (
-                  <AdapterRow
-                    key={adapter.id}
-                    adapter={adapter}
-                    checked={adapters.includes(adapter.id)}
-                    expanded={expandedAdapters.includes(adapter.id)}
-                    config={adapterConfigs[adapter.id] ?? defaultAdapterConfig(adapter.id)}
-                    allowPrCreation={allowPrCreation}
-                    onCheckedChange={(checked) => toggleAdapter(adapter.id, checked, setAdapters)}
-                    onConfigChange={(patch) => updateAdapterConfig(adapter.id, patch)}
-                    onToggle={() => toggleAdapterExpansion(adapter.id)}
-                  />
-                ))}
-              </div>
-            </section>
-
-            <section className="tool-panel" aria-labelledby="loop-behavior-heading">
-              <SectionTitle
-                id="loop-behavior-heading"
-                title="Loop behavior"
-                description="Set trigger cadence, command guardrails, and acceptance criteria."
-              />
-              <div className="behavior-grid">
-                <label>
-                  Cadence
-                  <select value={triggerCadence} onChange={(event) => setTriggerCadence(event.target.value)}>
-                    <option value="manual">Manual</option>
-                    <option value="on_ci_failure">On CI failure</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                  </select>
-                </label>
-                <div className="command-chips" aria-label="Allowed commands">
-                  <span>Allowed commands</span>
-                  <div>
-                    {commandList.length ? commandList.map((command) => <code key={command}>{command}</code>) : <em>No commands inferred</em>}
+                  <div className="mode-grid">
+                    <ModeButton
+                      icon={Sparkles}
+                      title="Try demo"
+                      description="Use the built-in demo project and preview loop outputs without writing files."
+                      active={experienceMode === "demo"}
+                      onClick={() => chooseExperienceMode("demo")}
+                    />
+                    <ModeButton
+                      icon={FolderGit2}
+                      title="Use my project"
+                      description="Scan a local project, select scenarios, preview the diff, then apply generated files."
+                      active={experienceMode === "project"}
+                      onClick={() => chooseExperienceMode("project")}
+                    />
                   </div>
-                </div>
-                <label className="wide-field">
-                  Edit allowed commands
-                  <textarea
-                    value={allowedCommands}
-                    rows={4}
-                    onChange={(event) => setAllowedCommands(event.target.value)}
-                  />
-                </label>
-                <label className="wide-field">
-                  Acceptance criteria
-                  <textarea
-                    value={acceptanceCriteria}
-                    rows={3}
-                    onChange={(event) => setAcceptanceCriteria(event.target.value)}
-                  />
-                </label>
-                <label className="check-line wide-field">
-                  <input
-                    type="checkbox"
-                    checked={allowPrCreation}
-                    onChange={(event) => setAllowPrCreation(event.target.checked)}
-                  />
-                  Allow verified loops to prepare PRs
-                </label>
-              </div>
-            </section>
+                </Spread>
+              ) : step === 2 ? (
+                <Spread
+                  numeral="02"
+                  kicker={experienceMode === "demo" ? "Demo project" : "Project scan"}
+                  headingId="step-project"
+                  title={experienceMode === "demo" ? "The built-in demo" : "Scan your project"}
+                  standfirst={scan ? `Scanned ${new Date(scan.detectedAt).toLocaleTimeString()}.` : "Scan before generating loops."}
+                >
+                  <div className="scan-bar">
+                    <StatusPill status={status} />
+                  </div>
+                  <div className="path-row">
+                    <label>
+                      {experienceMode === "demo" ? "Demo fixture path" : "Project path"}
+                      <input
+                        aria-label="Project path"
+                        value={projectPath}
+                        placeholder="Current working directory"
+                        disabled={experienceMode === "demo"}
+                        onChange={(event) => setProjectPath(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      onClick={chooseProjectFolder}
+                      disabled={experienceMode === "demo" || status.kind === "loading"}
+                      data-testid="choose-folder"
+                      title={experienceMode === "demo" ? "Switch to Use my project to choose a folder" : "Choose a local project folder"}
+                    >
+                      <FolderOpen size={16} />
+                      Choose folder
+                    </button>
+                    <button className="secondary-button compact-button" type="button" onClick={() => runScan()}>
+                      {status.kind === "loading" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+                      {experienceMode === "demo" ? "Reload demo" : "Scan project"}
+                    </button>
+                  </div>
+                  <div className="scan-layout">
+                    <dl className="scan-table">
+                      {projectSummary.map(([label, value]) => (
+                        <div key={label}>
+                          <dt>{label}</dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className="metrics-list" aria-label="Project summary">
+                      <Metric icon={FileCode2} label="Source files" value={scan?.files.source ?? 0} />
+                      <Metric icon={FlaskConical} label="Test files" value={scan?.files.tests ?? 0} />
+                      <Metric icon={Settings} label="Config files" value={scan?.files.configs ?? 0} />
+                      <Metric icon={PackageOpen} label="Scripts" value={scan ? Object.keys(scan.scripts).length : 0} />
+                    </div>
+                  </div>
+                </Spread>
+              ) : step === 3 ? (
+                <Spread
+                  numeral="03"
+                  kicker="Scenario templates"
+                  headingId="step-templates"
+                  title="Choose the loops to typeset"
+                  standfirst="Bounded, verifiable playbooks. Filter by role or category, then select what to generate."
+                  aside={<span className="count-badge">{selectedTemplates.length}/{TEMPLATE_DEFINITIONS.length} selected</span>}
+                >
+                  <div className="filter-row">
+                    <label>
+                      Category
+                      <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}>
+                        <option value="all">All categories</option>
+                        {TEMPLATE_CATEGORIES.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Audience
+                      <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value as AudienceFilter)}>
+                        <option value="all">All audiences</option>
+                        {TEMPLATE_AUDIENCES.map((audience) => (
+                          <option key={audience.id} value={audience.id}>
+                            {audience.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="secondary-button compact-button" type="button" onClick={selectRecommendedTemplates}>
+                      <ShieldCheck size={16} />
+                      Use recommended
+                    </button>
+                  </div>
+                  {visibleTemplates.length ? (
+                    <div className="template-list">
+                      {visibleTemplates.map((template) => (
+                        <TemplateRow
+                          key={template.id}
+                          template={template}
+                          checked={selectedTemplates.includes(template.id)}
+                          onChange={(checked) => toggleTemplate(template.id, checked, setSelectedTemplates)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state compact-empty">
+                      <FileCode2 size={23} />
+                      <strong>No templates match</strong>
+                      <span>Change the filters or use the recommended set.</span>
+                    </div>
+                  )}
+                </Spread>
+              ) : step === 4 ? (
+                <Spread
+                  numeral="04"
+                  kicker="Adapters"
+                  headingId="step-adapters"
+                  title="Where the configs are written"
+                  standfirst="Choose which agent configuration files loopgen should emit."
+                  aside={<span className="count-badge">{adapters.length}/{ADAPTER_DEFINITIONS.length} selected</span>}
+                >
+                  <div className="adapter-list">
+                    {ADAPTER_DEFINITIONS.map((adapter) => (
+                      <AdapterRow
+                        key={adapter.id}
+                        adapter={adapter}
+                        checked={adapters.includes(adapter.id)}
+                        expanded={expandedAdapters.includes(adapter.id)}
+                        config={adapterConfigs[adapter.id] ?? defaultAdapterConfig(adapter.id)}
+                        allowPrCreation={allowPrCreation}
+                        onCheckedChange={(checked) => toggleAdapter(adapter.id, checked, setAdapters)}
+                        onConfigChange={(patch) => updateAdapterConfig(adapter.id, patch)}
+                        onToggle={() => toggleAdapterExpansion(adapter.id)}
+                      />
+                    ))}
+                  </div>
+                </Spread>
+              ) : step === 5 ? (
+                <Spread
+                  numeral="05"
+                  kicker="Loop behavior"
+                  headingId="step-behavior"
+                  title="Guardrails and cadence"
+                  standfirst="Set trigger cadence, command guardrails, and acceptance criteria."
+                >
+                  <div className="behavior-grid">
+                    <label>
+                      Cadence
+                      <select value={triggerCadence} onChange={(event) => setTriggerCadence(event.target.value)}>
+                        <option value="manual">Manual</option>
+                        <option value="on_ci_failure">On CI failure</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </label>
+                    <div className="command-chips" aria-label="Allowed commands">
+                      <span>Allowed commands</span>
+                      <div>
+                        {commandList.length ? commandList.map((command) => <code key={command}>{command}</code>) : <em>No commands inferred</em>}
+                      </div>
+                    </div>
+                    <label className="wide-field">
+                      Edit allowed commands
+                      <textarea value={allowedCommands} rows={4} onChange={(event) => setAllowedCommands(event.target.value)} />
+                    </label>
+                    <label className="wide-field">
+                      Acceptance criteria
+                      <textarea value={acceptanceCriteria} rows={3} onChange={(event) => setAcceptanceCriteria(event.target.value)} />
+                    </label>
+                    <label className="check-line wide-field">
+                      <input type="checkbox" checked={allowPrCreation} onChange={(event) => setAllowPrCreation(event.target.checked)} />
+                      Allow verified loops to prepare PRs
+                    </label>
+                  </div>
+                </Spread>
+              ) : (
+                <Spread
+                  numeral="06"
+                  kicker="Proof"
+                  headingId="step-proof"
+                  title="Preview the proof"
+                  standfirst={
+                    preview
+                      ? `${modeLabel} preview generated from current selections.`
+                      : experienceMode === "demo"
+                        ? "Generate a demo preview to inspect loop engineering outputs."
+                        : "Generate a preview before writing files."
+                  }
+                >
+                  <div className="preview-stats" aria-label="Preview status">
+                    <span>
+                      <strong>{previewFileCount}</strong>
+                      files
+                    </span>
+                    <span>
+                      <strong>{playbookCount}</strong>
+                      playbooks
+                    </span>
+                    <span className={warningCount > 0 ? "warn-stat" : ""}>
+                      <strong>{warningCount}</strong>
+                      warnings
+                    </span>
+                  </div>
+                  <div className="proof">
+                    <DiffView diff={preview?.diff ?? ""} />
+                  </div>
+                  <StatusSummary status={status} warnings={preview?.warnings ?? scan?.warnings ?? []} />
+                </Spread>
+              )}
+              <StepFooter
+                step={step}
+                onBack={() => setStep((prev) => (prev > 1 ? ((prev - 1) as WizardStep) : prev))}
+                onNext={() => setStep((prev) => (prev < 6 ? ((prev + 1) as WizardStep) : prev))}
+                onGenerate={generatePreview}
+                onApply={applyFiles}
+                generateDisabled={selectedTemplates.length === 0 || adapters.length === 0 || status.kind === "loading"}
+                applyDisabled={!preview || status.kind === "loading" || experienceMode === "demo"}
+                applyLabel={experienceMode === "demo" ? "Preview only" : "Apply files"}
+                applyTitle={experienceMode === "demo" ? "Demo mode is preview-only" : preview ? "Apply generated files" : "Generate preview first"}
+                loading={status.kind === "loading"}
+              />
+            </div>
           </div>
-
-          <aside className="preview-panel" aria-label="Preview diff">
-            <div className="preview-header">
-              <div>
-                <div className="panel-kicker">Preview diff</div>
-                <h2>Preview diff</h2>
-                <p>
-                  {preview
-                    ? `${modeLabel} preview generated from current selections.`
-                    : experienceMode === "demo"
-                      ? "Generate a demo preview to inspect loop engineering outputs."
-                      : "Generate a preview before writing files."}
-                </p>
-              </div>
-              <ShieldCheck size={21} />
-            </div>
-            <div className="preview-stats" aria-label="Preview status">
-              <span>
-                <strong>{previewFileCount}</strong>
-                files
-              </span>
-              <span>
-                <strong>{playbookCount}</strong>
-                playbooks
-              </span>
-              <span className={warningCount > 0 ? "warn-stat" : ""}>
-                <strong>{warningCount}</strong>
-                warnings
-              </span>
-            </div>
-            <DiffView diff={preview?.diff ?? ""} />
-            <div className="preview-footer">
-              <StatusSummary status={status} warnings={preview?.warnings ?? scan?.warnings ?? []} />
-              <div className="action-row">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={applyFiles}
-                  disabled={!preview || status.kind === "loading" || experienceMode === "demo"}
-                  data-testid="apply-files"
-                  title={experienceMode === "demo" ? "Demo mode is preview-only" : preview ? "Apply generated files" : "Generate preview first"}
-                >
-                  <Check size={17} />
-                  {experienceMode === "demo" ? "Preview only" : "Apply files"}
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={generatePreview}
-                  disabled={selectedTemplates.length === 0 || adapters.length === 0 || status.kind === "loading"}
-                  data-testid="generate-preview"
-                >
-                  {status.kind === "loading" ? <Loader2 size={18} className="spin" /> : <Play size={18} />}
-                  Generate preview
-                </button>
-              </div>
-            </div>
-          </aside>
-        </section>
         ) : activeView === "history" ? (
           <HistoryView items={historyItems} scan={scan} preview={preview} />
         ) : (
@@ -659,7 +618,186 @@ export function App() {
 }
 
 type WorkspaceView = "configure" | "history" | "settings";
+type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 type HistoryKind = Exclude<StatusState["kind"], "idle" | "loading">;
+
+const WIZARD_STEPS: Array<{ n: WizardStep; label: string }> = [
+  { n: 1, label: "Experience" },
+  { n: 2, label: "Project" },
+  { n: 3, label: "Templates" },
+  { n: 4, label: "Adapters" },
+  { n: 5, label: "Behavior" },
+  { n: 6, label: "Proof" }
+];
+
+function Masthead({
+  activeView,
+  onSelectView,
+  theme,
+  onToggleTheme
+}: {
+  activeView: WorkspaceView;
+  onSelectView: (view: WorkspaceView) => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+}) {
+  const tabs: Array<{ id: WorkspaceView; label: string; testid: string }> = [
+    { id: "configure", label: "Configure", testid: "nav-configure" },
+    { id: "history", label: "History", testid: "nav-history" },
+    { id: "settings", label: "Settings", testid: "nav-settings" }
+  ];
+  return (
+    <header className="masthead" role="banner">
+      <div className="masthead-brand">
+        <span className="wordmark">loopgen</span>
+        <span className="masthead-sub">Loop engineering — wizard / no. 01</span>
+      </div>
+      <div className="masthead-right">
+        <nav className="masthead-nav" aria-label="Workspace">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`masthead-tab ${activeView === tab.id ? "active" : ""}`}
+              aria-current={activeView === tab.id ? "page" : undefined}
+              onClick={() => onSelectView(tab.id)}
+              data-testid={tab.testid}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <button
+          className="masthead-theme"
+          type="button"
+          onClick={onToggleTheme}
+          aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          data-testid="theme-toggle"
+        >
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function ContentsStepper({ step, onSelectStep }: { step: WizardStep; onSelectStep: (step: WizardStep) => void }) {
+  return (
+    <nav className="contents-stepper" aria-label="Wizard steps">
+      <p className="kicker">Contents</p>
+      <ol>
+        {WIZARD_STEPS.map((item) => (
+          <li key={item.n}>
+            <button
+              type="button"
+              className={`stepper-item ${item.n === step ? "active" : ""} ${item.n < step ? "done" : ""}`}
+              aria-current={item.n === step ? "step" : undefined}
+              onClick={() => onSelectStep(item.n)}
+            >
+              <span className="stepper-n">{String(item.n).padStart(2, "0")}</span>
+              <span className="stepper-label">{item.label}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+function Spread({
+  numeral,
+  kicker,
+  title,
+  standfirst,
+  headingId,
+  aside,
+  children
+}: {
+  numeral: string;
+  kicker: string;
+  title: string;
+  standfirst: string;
+  headingId: string;
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="spread" aria-labelledby={headingId}>
+      <header className="spread-head">
+        <span className="step-numeral" aria-hidden="true">
+          {numeral}
+        </span>
+        <div className="spread-head-copy">
+          <p className="kicker">{kicker}</p>
+          <h1 id={headingId} tabIndex={-1}>
+            {title}
+          </h1>
+          <p className="standfirst">{standfirst}</p>
+        </div>
+        {aside ? <div className="spread-aside">{aside}</div> : null}
+      </header>
+      <div className="spread-body">{children}</div>
+    </section>
+  );
+}
+
+function StepFooter({
+  step,
+  onBack,
+  onNext,
+  onGenerate,
+  onApply,
+  generateDisabled,
+  applyDisabled,
+  applyLabel,
+  applyTitle,
+  loading
+}: {
+  step: WizardStep;
+  onBack: () => void;
+  onNext: () => void;
+  onGenerate: () => void;
+  onApply: () => void;
+  generateDisabled: boolean;
+  applyDisabled: boolean;
+  applyLabel: string;
+  applyTitle: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="step-footer">
+      <button className="secondary-button" type="button" onClick={onBack} disabled={step === 1}>
+        Back
+      </button>
+      <div className="step-footer-actions">
+        {step < 6 ? (
+          <button className="primary-button" type="button" onClick={onNext}>
+            Next
+          </button>
+        ) : (
+          <>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onApply}
+              disabled={applyDisabled}
+              data-testid="apply-files"
+              title={applyTitle}
+            >
+              <Check size={17} />
+              {applyLabel}
+            </button>
+            <button className="primary-button" type="button" onClick={onGenerate} disabled={generateDisabled} data-testid="generate-preview">
+              {loading ? <Loader2 size={18} className="spin" /> : <Play size={18} />}
+              Generate preview
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface HistoryItem {
   id: string;
