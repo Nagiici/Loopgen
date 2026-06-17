@@ -1,6 +1,6 @@
 {
   "name": "loopgen",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Generate bounded, verifiable AI agent configs for Codex, Claude, Cursor, and local models — with safety rails baked in.",
   "type": "module",
   "engines": {
