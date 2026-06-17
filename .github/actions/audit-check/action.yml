@@ -26,6 +26,10 @@ inputs:
     description: "Fail if the audit hash chain is broken (tamper check)"
     required: false
     default: "true"
+  require-attested:
+    description: "Fail unless every run carries a CI attestation, and cryptographically verify the signed proofs (installs cosign)"
+    required: false
+    default: "false"
   version:
     description: "loopgen version to use (npm version or dist-tag)"
     required: false
@@ -41,6 +45,9 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+    # cosign is needed to cryptographically verify the signed attestations; only install it when asked.
+    - if: ${{ inputs.require-attested == 'true' }}
+      uses: sigstore/cosign-installer@v3
     - shell: bash
       env:
         PROJECT: ${{ inputs.project }}
@@ -48,6 +55,7 @@ runs:
         SINCE: ${{ inputs.since }}
         NO_VIOLATIONS: ${{ inputs.require-no-violations }}
         REQUIRE_CHAIN: ${{ inputs.require-chain }}
+        REQUIRE_ATTESTED: ${{ inputs.require-attested }}
         VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
@@ -58,12 +66,18 @@ runs:
           { echo "## loopgen governance"; echo; cat "${RUNNER_TEMP}/loopgen-gov.md"; } >> "$GITHUB_STEP_SUMMARY" || true
         fi
 
+        # Cryptographically verify the signed attestations (not just the in-band claim).
+        if [ "$REQUIRE_ATTESTED" = "true" ]; then
+          loopgen audit verify "$PROJECT" --attestation
+        fi
+
         # Build the policy gate command from inputs.
         args=(audit check "$PROJECT")
         if [ -n "$REQUIRE" ]; then args+=(--require "$REQUIRE"); fi
         if [ -n "$SINCE" ]; then args+=(--since "$SINCE"); fi
         if [ "$NO_VIOLATIONS" = "true" ]; then args+=(--require-no-violations); fi
         if [ "$REQUIRE_CHAIN" = "true" ]; then args+=(--require-chain); fi
+        if [ "$REQUIRE_ATTESTED" = "true" ]; then args+=(--require-attested); fi
 
         # Exits non-zero if the policy is not satisfied → the job (and PR) fails.
         loopgen "${args[@]}"

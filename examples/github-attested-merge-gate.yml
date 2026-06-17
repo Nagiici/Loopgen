@@ -1,0 +1,37 @@
+# Reference workflow — produce a VERIFIABLE signed attestation for an AI-assisted change, then gate the
+# merge on it. Copy into your repo's .github/workflows/.
+#
+# Why id-token: write? It hands the job a GitHub OIDC identity, so cosign can sign the audit entry hash
+# keylessly against the Sigstore / Rekor PUBLIC transparency log — loopgen holds no keys. The signature
+# binds an accountable CI identity (repo + workflow) to the exact commit + verification result.
+# See docs/THREAT-MODEL.md for what this does and does not prove.
+name: loopgen attested gate
+on: [pull_request]
+
+permissions:
+  contents: read
+  id-token: write # GitHub OIDC identity → keyless Sigstore signing
+
+jobs:
+  attested-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: sigstore/cosign-installer@v3 # the keyless signer used by `loopgen run --attest`
+      - run: npm install -g loopgen
+
+      # Run the loop's verification IN CI and sign the audit entry against Sigstore/Rekor.
+      # In CI with an OIDC identity, attestation is automatic; pass --no-attest to opt out.
+      - run: loopgen run test-repair --attest
+
+      # Gate the merge on a CRYPTOGRAPHICALLY VERIFIABLE attestation — not just a local self-attested log.
+      # require-attested makes the action install cosign and run `audit verify --attestation`.
+      - uses: Nagiici/Loopgen/.github/actions/audit-check@v0.7.0
+        with:
+          require: test-repair
+          require-no-violations: "true"
+          require-chain: "true"
+          require-attested: "true"

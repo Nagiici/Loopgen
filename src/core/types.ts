@@ -192,6 +192,44 @@ export interface ForbiddenPathResult {
 
 export type RunMode = "referee" | "driven";
 
+// ---------- root of trust (`--attest`) ----------
+// "local" = self-attested, tamper-evident-only evidence (the original behavior).
+// "attested" = produced in a CI env with an ambient OIDC identity, so the audit entry hash can be
+// signed against the Sigstore/Rekor public transparency log (verifiable proof). See docs/THREAT-MODEL.md.
+export type TrustTier = "local" | "attested";
+
+// Hard-to-forge claims captured from the CI runner's environment (vs. the spoofable local os.userInfo).
+export interface CiProvenance {
+  provider: "github-actions" | "other-ci";
+  repo?: string; // GITHUB_REPOSITORY
+  ref?: string; // GITHUB_REF
+  commitSha?: string; // GITHUB_SHA — cross-checked against git.shaAfter
+  workflow?: string; // GITHUB_WORKFLOW
+  workflowRef?: string; // GITHUB_WORKFLOW_REF — the signed SLSA identity
+  runId?: string; // GITHUB_RUN_ID
+  runAttempt?: string; // GITHUB_RUN_ATTEMPT
+  runnerEnv?: string; // RUNNER_ENVIRONMENT — github-hosted | self-hosted
+  actor?: string; // GITHUB_ACTOR
+}
+
+// The digest set an external signature binds to. Recomputable at verify time from the (chain-valid) entry.
+// NOTE: `entryHash` is deliberately NOT here — it only exists after hashing, so it lives in the signed
+// bundle, not in this in-chain claim. This block carries only fields known before the entry is hashed.
+export interface AttestationSubject {
+  commitSha: string | null;
+  treeClean: boolean;
+  loopSpecHash: string; // sha256 of canonicalized LoopSpec — pins "which tests"
+  verificationDigest: string; // sha256 of canonicalized verification commands + exit codes
+}
+
+// In-band, HASHED claim — rides the same additive-optional path as `driven?` (undefined keys are skipped
+// by canonicalize, so absence is byte-identical to the pre-feature chain).
+export interface RunProvenance {
+  tier: TrustTier;
+  ci?: CiProvenance;
+  subject?: AttestationSubject;
+}
+
 export interface AuditEntry {
   schemaVersion: "1";
   entryId: string;
@@ -214,6 +252,7 @@ export interface AuditEntry {
     model: { adapter: string; modelName: string; baseUrl: string };
     attempts: IterationSummary[];
   };
+  provenance?: RunProvenance;
   prevHash: string | null;
   hash: string;
 }
@@ -238,6 +277,9 @@ export interface RunOptions {
   openaiCompatibleBaseUrl?: string;
   openaiCompatibleApiKeyEnv?: string;
   modelClient?: ModelClient; // dependency-injection seam for tests; never set by the CLI
+  // root of trust
+  attest?: boolean; // --attest / --no-attest; undefined = auto (sign when CI OIDC identity is present)
+  attestor?: Attestor; // dependency-injection seam for tests; never set by the CLI
 }
 
 export interface RunResult {
@@ -249,6 +291,45 @@ export interface RunResult {
   reportPath?: string;
   dryRun: boolean;
   iterationLogs?: IterationLog[];
+  attestation?: AttestationRef; // out-of-band signing outcome (NOT part of the hashed entry)
+}
+
+// The external signature reference — written to a sibling file, never into the hashed AuditEntry.
+export type AttestationMethod = "github-attest" | "cosign-keyless" | "none";
+
+export interface AttestationRef {
+  method: AttestationMethod;
+  bundlePath?: string; // .loopgen/attestations/<entryId>.sigstore.json (project-relative)
+  rekorLogIndex?: string;
+  predicateType?: string;
+  verified?: boolean; // set by `audit verify --attestation`, not at produce time
+}
+
+export interface AttestRequest {
+  projectRoot: string;
+  entryId: string;
+  entryHash: string; // == AuditEntry.hash — the subject the signature binds to
+  subject: AttestationSubject;
+  ci?: CiProvenance;
+}
+
+export interface VerifyRequest {
+  projectRoot: string;
+  entryHash: string;
+  ci?: CiProvenance;
+  ref: AttestationRef;
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  reason?: string;
+}
+
+// Dependency-injection seam: the real implementation shells out to cosign/gh; tests inject a fake so
+// every suite stays network- and binary-free (mirrors the ModelClient seam used by driven mode).
+export interface Attestor {
+  produce(request: AttestRequest): Promise<AttestationRef>;
+  verify(request: VerifyRequest): Promise<VerifyResult>;
 }
 
 // ---------- driven mode (`loopgen run --mode driven`) ----------
@@ -338,6 +419,7 @@ export interface GovernanceSummary {
   passRate: number; // 0..1
   byLoop: Record<string, { total: number; passed: number }>;
   byMode: { referee: number; driven: number };
+  byTier: { local: number; attested: number };
   byActor: Record<string, { total: number; passed: number }>;
   blockedAttempts: number;
   forbiddenViolationRuns: number;
@@ -352,6 +434,9 @@ export interface AuditPolicy {
   since?: string;
   requireNoViolations?: boolean;
   requireChainValid?: boolean;
+  // requireAttested checks the in-band claim (tier === "attested"); cryptographic verification of the
+  // signature is `loopgen audit verify --attestation`. See docs/THREAT-MODEL.md for why they're split.
+  requireAttested?: boolean;
 }
 
 export interface PolicyResult {

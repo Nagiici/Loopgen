@@ -20,6 +20,7 @@ export function renderGovernanceMarkdown(summary: GovernanceSummary): string {
 - Runs: **${summary.total}** (${summary.passed} passed / ${summary.failed} failed) — pass rate **${pct(summary.passRate)}**
 - Window: ${summary.firstAt ?? "—"} → ${summary.lastAt ?? "—"}
 - Modes: referee ${summary.byMode.referee} · driven ${summary.byMode.driven}
+- Trust: local evidence ${summary.byTier.local} · **CI-attested** ${summary.byTier.attested}
 - Chain integrity: ${summary.chain.valid ? "**valid**" : `**BROKEN** (entry ${summary.chain.brokenAt})`}
 - Forbidden-path violations: **${summary.forbiddenViolationRuns}** run(s)
 - Blocked attempts (driven, prevented at apply time): **${summary.blockedAttempts}**
@@ -94,6 +95,7 @@ code{font-family:"IBM Plex Mono",monospace;font-size:13px}
   <div class="card"><div class="k">Forbidden violations</div><div class="v ${summary.forbiddenViolationRuns ? "bad" : "good"}">${summary.forbiddenViolationRuns}</div></div>
   <div class="card"><div class="k">Blocked (prevented)</div><div class="v">${summary.blockedAttempts}</div></div>
   <div class="card"><div class="k">Chain</div><div class="v ${summary.chain.valid ? "good" : "bad"}">${summary.chain.valid ? "valid" : "BROKEN"}</div></div>
+  <div class="card"><div class="k">CI-attested</div><div class="v">${summary.byTier.attested}/${summary.total}</div></div>
 </div>
 <h2>By loop</h2>
 <table><thead><tr><th>Loop</th><th>Runs</th><th>Passed</th><th>Pass rate</th></tr></thead><tbody>${loopRows || '<tr><td colspan="4">No runs.</td></tr>'}</tbody></table>

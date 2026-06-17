@@ -8,7 +8,7 @@ export const AUDIT_FILE = ".loopgen/audit.jsonl";
 // Deterministic JSON: object keys sorted recursively so the hash is stable across runs/machines.
 // undefined-valued keys are skipped (matching JSON.stringify) so the in-memory hash equals the hash
 // recomputed from the JSON-round-tripped entry — otherwise dropped keys would break the chain.
-function canonicalize(value: unknown): string {
+export function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
   const record = value as Record<string, unknown>;

@@ -1,10 +1,11 @@
-import type { AuditEntry, IterationLog, LoopSpec, VerificationResult } from "./types.js";
+import type { AttestationRef, AuditEntry, IterationLog, LoopSpec, VerificationResult } from "./types.js";
 
 export function renderProofReport(
   loop: LoopSpec,
   entry: AuditEntry,
   verification: VerificationResult,
-  iterationLogs?: IterationLog[]
+  iterationLogs?: IterationLog[],
+  attestation?: AttestationRef
 ): string {
   const banner = entry.passed ? "✅ PASS" : "❌ FAIL";
   const changed = [...entry.changedFiles.tracked, ...entry.changedFiles.untracked];
@@ -31,6 +32,7 @@ Loop: \`${entry.loopId}\` · Mode: ${entry.mode} · Iterations: ${entry.iteratio
 Generated: ${entry.timestamp}
 By: ${entry.actor.user ?? "unknown"}@${entry.actor.host ?? "unknown"}
 Audit entry: \`${entry.hash}\`
+Trust: ${trustLine(entry, attestation)}
 
 ## Goal
 
@@ -61,7 +63,7 @@ ${forbiddenSection}
 ${entry.driven && iterationLogs ? `\n${renderIterationHistory(iterationLogs)}` : ""}
 ---
 
-${scopeFooter(entry)}
+${scopeFooter(entry, attestation)}
 `;
 }
 
@@ -87,9 +89,31 @@ ${log.reasoning ? `> ${log.reasoning}\n` : ""}- Applied: ${applied}
   return `## Iteration history\n\n${blocks.join("\n\n")}\n`;
 }
 
-function scopeFooter(entry: AuditEntry): string {
+function scopeFooter(entry: AuditEntry, attestation?: AttestationRef): string {
   if (entry.driven) {
-    return `> Scope: **bounded + enforced**. loopgen drove a local model (${entry.driven.model.adapter} · ${entry.driven.model.modelName}), blocked forbidden writes and non-allowlisted commands **at apply time**, bounded iterations, and verified each one (stop reason: ${entry.driven.stopReason}). The model still proposes actions — this is enforcement, not a sandbox. Audit is hash-chained in \`.loopgen/audit.jsonl\`.`;
+    return `> Scope: **bounded + enforced**. loopgen drove a local model (${entry.driven.model.adapter} · ${entry.driven.model.modelName}), blocked forbidden writes and non-allowlisted commands **at apply time**, bounded iterations, and verified each one (stop reason: ${entry.driven.stopReason}). The model still proposes actions — this is enforcement, not a sandbox.${trustFooter(entry, attestation)}`;
   }
-  return `> Scope: this is **detection, not prevention**. loopgen ran the verification commands above and diffed the working tree after the work session; it does not sandbox the agent or block reads. The audit entry is hash-chained in \`.loopgen/audit.jsonl\` (tamper-evident against in-place edits).`;
+  return `> Scope: this is **detection, not prevention**. loopgen ran the verification commands above and diffed the working tree after the work session; it does not sandbox the agent or block reads.${trustFooter(entry, attestation)}`;
+}
+
+// Evidence (local) vs proof (CI-attested) — stated precisely so the report never over-claims.
+function isSigned(entry: AuditEntry, attestation?: AttestationRef): boolean {
+  return entry.provenance?.tier === "attested" && Boolean(attestation && attestation.method !== "none");
+}
+
+function trustLine(entry: AuditEntry, attestation?: AttestationRef): string {
+  if (isSigned(entry, attestation)) {
+    return "**attested** (CI) — audit hash signed against Sigstore/Rekor; verify with `loopgen audit verify --attestation`";
+  }
+  if (entry.provenance?.tier === "attested") {
+    return "attested (CI) requested, but no signer was available — **local evidence only**";
+  }
+  return "**local** — tamper-evident evidence (re-run in CI for a verifiable signed attestation)";
+}
+
+function trustFooter(entry: AuditEntry, attestation?: AttestationRef): string {
+  if (isSigned(entry, attestation)) {
+    return ` This run is **CI-attested**: the audit entry hash is signed against the Sigstore/Rekor public transparency log and bound to commit \`${entry.git.shaAfter ?? "(none)"}\` — **verifiable proof** (\`loopgen audit verify --attestation\`).`;
+  }
+  return ` The audit entry is hash-chained in \`.loopgen/audit.jsonl\` — **tamper-evident local evidence**, not signed proof. Re-run in CI for a verifiable signed attestation.`;
 }

@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { appendAuditEntry, readAuditLog, verifyAuditChain } from "../src/core/audit.js";
+import { appendAuditEntry, hashEntry, readAuditLog, verifyAuditChain } from "../src/core/audit.js";
 import type { AuditEntryInput } from "../src/core/types.js";
 
 const roots: string[] = [];
@@ -57,5 +57,32 @@ describe("audit log", () => {
     const result = verifyAuditChain(entries);
     expect(result.valid).toBe(false);
     expect(result.brokenAt).toBe(0);
+  });
+
+  test("an entry carrying a provenance block still forms a valid chain (and tampering still breaks it)", async () => {
+    const root = await tempRoot();
+    const withProv: AuditEntryInput = {
+      ...input("a"),
+      provenance: {
+        tier: "attested",
+        ci: { provider: "github-actions", repo: "o/r", commitSha: "abc" },
+        subject: { commitSha: "abc", treeClean: true, loopSpecHash: "h", verificationDigest: "d" }
+      }
+    };
+    await appendAuditEntry(root, withProv);
+    await appendAuditEntry(root, input("b"));
+    const entries = await readAuditLog(root);
+    expect(entries[0].provenance?.tier).toBe("attested");
+    expect(verifyAuditChain(entries).valid).toBe(true);
+    entries[0].passed = false;
+    expect(verifyAuditChain(entries).valid).toBe(false);
+  });
+
+  test("the optional provenance field is chain-compatible: undefined contributes nothing to the hash", async () => {
+    // canonicalize skips undefined keys, so an absent provenance hashes byte-identically to the
+    // pre-feature shape — old ledgers (no provenance) keep verifying.
+    const plain = input("a");
+    const explicitUndefined: AuditEntryInput = { ...input("a"), provenance: undefined };
+    expect(hashEntry(plain, null)).toBe(hashEntry(explicitUndefined, null));
   });
 });

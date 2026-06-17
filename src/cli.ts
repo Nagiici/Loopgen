@@ -14,6 +14,7 @@ import { startLoopgenServer } from "./server.js";
 import { DEFAULT_ADAPTER_IDS, parseAdapterIds } from "./core/adapters.js";
 import { runLoop } from "./core/runner.js";
 import { readAuditLog, verifyAuditChain } from "./core/audit.js";
+import { loadAttestationRef, verifyAttestation } from "./core/attest.js";
 import { buildSummary, collectAuditFiles, evaluatePolicy } from "./core/governance.js";
 import { renderGovernanceHtml, renderGovernanceMarkdown } from "./core/governance-report.js";
 import { promises as fsp } from "node:fs";
@@ -42,7 +43,7 @@ const program = new Command();
 
 program
   .name("loopgen")
-  .description("Run your AI's coding loop and prove its work actually passed — real verification, a tamper-evident audit, and a CI gate.")
+  .description("Verification & provenance gate for AI-generated code — real verification, tamper-evident local evidence, and a verifiable signed attestation in CI. Bring your own agent.")
   .version(version);
 
 program
@@ -181,7 +182,8 @@ program
   .option("--openai-compatible-model <model>", "driven mode: OpenAI-compatible model name")
   .option("--openai-compatible-base-url <url>", "driven mode: OpenAI-compatible base URL")
   .option("--openai-compatible-api-key-env <name>", "driven mode: env var name for the API key")
-  .description("Run a loop's verification against the working tree and write a tamper-evident proof.")
+  .option("--no-attest", "skip signing the audit entry even in CI (attestation is automatic when an OIDC identity is present)")
+  .description("Run a loop's verification against the working tree; leaves tamper-evident evidence locally, or a verifiable signed attestation in CI.")
   .action(
     async (
       loop: string | undefined,
@@ -201,6 +203,7 @@ program
         openaiCompatibleModel?: string;
         openaiCompatibleBaseUrl?: string;
         openaiCompatibleApiKeyEnv?: string;
+        attest?: boolean;
       }
     ) => {
       const result = await runLoop({
@@ -218,7 +221,8 @@ program
         ollamaBaseUrl: options.ollamaBaseUrl,
         openaiCompatibleModel: options.openaiCompatibleModel,
         openaiCompatibleBaseUrl: options.openaiCompatibleBaseUrl,
-        openaiCompatibleApiKeyEnv: options.openaiCompatibleApiKeyEnv
+        openaiCompatibleApiKeyEnv: options.openaiCompatibleApiKeyEnv,
+        attest: options.attest
       });
       if (options.json) {
         console.log(JSON.stringify(result, null, 2));
@@ -234,15 +238,38 @@ const audit = program.command("audit").description("Inspect, aggregate, and gate
 audit
   .command("verify")
   .argument("[project]", "project directory", ".")
-  .description("Verify the audit hash chain is intact (tamper check).")
-  .action(async (project: string) => {
-    const entries = await readAuditLog(path.resolve(project));
+  .option("--attestation", "also cryptographically verify external attestations (cosign/Sigstore), not just the local chain")
+  .description("Verify the audit hash chain is intact (tamper check); with --attestation, verify the signed proofs too.")
+  .action(async (project: string, options: { attestation?: boolean }) => {
+    const root = path.resolve(project);
+    const entries = await readAuditLog(root);
     const chain = verifyAuditChain(entries);
     if (chain.valid) {
       console.log(`Audit chain valid (${entries.length} entries).`);
     } else {
       console.log(`Audit chain BROKEN at entry ${chain.brokenAt}.`);
       process.exitCode = 1;
+    }
+
+    if (options.attestation) {
+      const attested = entries.filter((entry) => entry.provenance?.tier === "attested");
+      if (!attested.length) {
+        console.log("Attestations: no CI-attested entries to verify.");
+        return;
+      }
+      let failures = 0;
+      for (const entry of attested) {
+        const ref = await loadAttestationRef(root, entry.entryId);
+        const result = await verifyAttestation({ projectRoot: root, entryHash: entry.hash, ci: entry.provenance?.ci, ref });
+        const id = entry.entryId.slice(0, 8);
+        if (result.ok) console.log(`  attestation ${id}… ok${result.reason ? ` (${result.reason})` : ""}`);
+        else {
+          console.log(`  attestation ${id}… FAILED — ${result.reason ?? "unknown"}`);
+          failures += 1;
+        }
+      }
+      console.log(`Attestations: ${attested.length - failures}/${attested.length} verified.`);
+      if (failures) process.exitCode = 1;
     }
   });
 
@@ -292,18 +319,20 @@ audit
   .option("--since <iso>", "only consider runs at/after this ISO timestamp")
   .option("--require-no-violations", "fail if any run modified forbidden paths")
   .option("--require-chain", "fail if the audit chain is broken")
+  .option("--require-attested", "fail unless every run carries a CI attestation claim (verify the signatures with `audit verify --attestation`)")
   .description("Gate CI/merge on the audit log; exits 1 if the policy is not satisfied.")
   .action(
     async (
       project: string,
-      options: { require?: string; since?: string; requireNoViolations?: boolean; requireChain?: boolean }
+      options: { require?: string; since?: string; requireNoViolations?: boolean; requireChain?: boolean; requireAttested?: boolean }
     ) => {
       const entries = await readAuditLog(path.resolve(project));
       const policy: AuditPolicy = {
         requireLoops: options.require ? options.require.split(",").map((item) => item.trim()).filter(Boolean) : undefined,
         since: options.since,
         requireNoViolations: options.requireNoViolations,
-        requireChainValid: options.requireChain
+        requireChainValid: options.requireChain,
+        requireAttested: options.requireAttested
       };
       const result = evaluatePolicy(entries, policy);
       if (result.ok) {
@@ -407,11 +436,19 @@ function printRunResult(result: Awaited<ReturnType<typeof runLoop>>) {
   console.log(`  files changed: ${changed}`);
   if (result.reportPath) console.log(`  report: ${result.reportPath}`);
   if (!result.dryRun) console.log(`  audit: .loopgen/audit.jsonl (${result.entry.hash.slice(0, 12)}…)`);
+  const tier = result.entry.provenance?.tier;
+  if (tier === "attested") {
+    const signed = result.attestation && result.attestation.method !== "none";
+    console.log(`  trust: ${signed ? `CI-attested (signed via ${result.attestation!.method}) — verify with \`loopgen audit verify --attestation\`` : "attestation requested but no signer available — local evidence only"}`);
+  } else if (!result.dryRun) {
+    console.log("  trust: local evidence (run in CI for a verifiable signed attestation)");
+  }
 }
 
 function printSummary(summary: GovernanceSummary) {
   console.log(`Runs: ${summary.total} (${summary.passed} pass / ${summary.failed} fail) — ${Math.round(summary.passRate * 100)}%`);
   console.log(`Modes: referee ${summary.byMode.referee}, driven ${summary.byMode.driven}`);
+  console.log(`Trust: local ${summary.byTier.local}, CI-attested ${summary.byTier.attested}`);
   console.log(`Chain: ${summary.chain.valid ? "valid" : `BROKEN at ${summary.chain.brokenAt}`}`);
   console.log(`Forbidden violations: ${summary.forbiddenViolationRuns} run(s); blocked attempts (prevented): ${summary.blockedAttempts}`);
   for (const [loop, stat] of Object.entries(summary.byLoop).sort((a, b) => b[1].total - a[1].total)) {

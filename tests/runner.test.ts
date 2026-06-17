@@ -7,7 +7,7 @@ import { stringify } from "yaml";
 import { afterEach, describe, expect, test } from "vitest";
 import { readAuditLog, verifyAuditChain } from "../src/core/audit.js";
 import { runLoop } from "../src/core/runner.js";
-import type { ModelClient } from "../src/core/types.js";
+import type { Attestor, ModelClient } from "../src/core/types.js";
 
 function fakeModel(responses: string[]): ModelClient {
   let index = 0;
@@ -222,3 +222,86 @@ describe("runLoop (driven mode)", () => {
 function writeThenNoFinish(file: string): string {
   return JSON.stringify({ reasoning: "try", actions: [{ type: "write_file", path: file, content: "noop" }] });
 }
+
+async function withEnv(overrides: Record<string, string | undefined>, fn: () => Promise<void>): Promise<void> {
+  const saved = Object.keys(overrides).map((key) => [key, process.env[key]] as const);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    await fn();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+describe("runLoop (root of trust)", () => {
+  const fakeAttestor: Attestor = {
+    async produce(req) {
+      const dir = path.join(req.projectRoot, ".loopgen", "attestations");
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, `${req.entryId}.sigstore.json`), JSON.stringify({ entryHash: req.entryHash }));
+      return { method: "cosign-keyless", bundlePath: path.join(".loopgen", "attestations", `${req.entryId}.sigstore.json`) };
+    },
+    async verify() {
+      return { ok: true };
+    }
+  };
+  // Clear every signal detectCiProvenance reads, so the "local" case is deterministic even when the
+  // suite itself runs inside GitHub Actions.
+  const noCi = { GITHUB_ACTIONS: undefined, CI: undefined, ACTIONS_ID_TOKEN_REQUEST_URL: undefined, ACTIONS_ID_TOKEN_REQUEST_TOKEN: undefined, SIGSTORE_ID_TOKEN: undefined };
+
+  test("a local run (no CI identity) lands at tier 'local' with no attestation bundle", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml(['node -e "process.exit(0)"']));
+    await withEnv(noCi, async () => {
+      const result = await runLoop({ projectRoot: root, attestor: fakeAttestor });
+      expect(result.entry.provenance?.tier).toBe("local");
+      expect(result.entry.provenance?.subject).toBeDefined();
+      expect(result.attestation).toBeUndefined();
+      await expect(fs.access(path.join(root, ".loopgen/attestations"))).rejects.toThrow();
+    });
+  });
+
+  test("in CI with an OIDC identity → tier 'attested' and a bundle produced via the injected attestor", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml(['node -e "process.exit(0)"']));
+    await withEnv(
+      {
+        ...noCi,
+        GITHUB_ACTIONS: "true",
+        GITHUB_REPOSITORY: "o/r",
+        GITHUB_SHA: "deadbeef",
+        ACTIONS_ID_TOKEN_REQUEST_URL: "https://example/token",
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: "tok"
+      },
+      async () => {
+        const result = await runLoop({ projectRoot: root, attestor: fakeAttestor });
+        expect(result.entry.provenance?.tier).toBe("attested");
+        expect(result.entry.provenance?.ci?.repo).toBe("o/r");
+        expect(result.attestation?.method).toBe("cosign-keyless");
+        const bundle = path.join(root, ".loopgen", "attestations", `${result.entry.entryId}.sigstore.json`);
+        await expect(fs.stat(bundle)).resolves.toBeDefined();
+        // chain stays valid with the in-band provenance claim
+        expect(verifyAuditChain(await readAuditLog(root)).valid).toBe(true);
+      }
+    );
+  });
+
+  test("--no-attest disables signing even with a CI identity", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml(['node -e "process.exit(0)"']));
+    await withEnv(
+      { ...noCi, GITHUB_ACTIONS: "true", GITHUB_REPOSITORY: "o/r", ACTIONS_ID_TOKEN_REQUEST_URL: "u", ACTIONS_ID_TOKEN_REQUEST_TOKEN: "t" },
+      async () => {
+        const result = await runLoop({ projectRoot: root, attest: false, attestor: fakeAttestor });
+        expect(result.entry.provenance?.tier).toBe("local");
+        expect(result.attestation).toBeUndefined();
+      }
+    );
+  });
+});

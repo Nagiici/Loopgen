@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>loopgen — run your AI's coding loop and prove its work passed</title>
-<meta name="description" content="loopgen runs your AI's coding loop, executes your real verification, enforces forbidden-path and iteration limits, and writes a tamper-evident audit + proof report. Local-first, open source CLI. With a CI merge gate and a team governance dashboard." />
-<meta name="keywords" content="AI agents, verification, audit, CI gate, AI coding agent governance, Claude Code, Cursor, Codex, Ollama, prove AI generated code" />
+<title>loopgen — verification &amp; provenance gate for AI-generated code</title>
+<meta name="description" content="loopgen runs your real verification against AI-generated code and records it in a hash-chained ledger. Locally it's tamper-evident evidence; in CI it signs a verifiable attestation (Sigstore/SLSA) you can gate merges on. Vendor-neutral, local-first, open source CLI." />
+<meta name="keywords" content="AI agents, verification, provenance, attestation, sigstore, slsa, supply chain, audit, CI merge gate, AI coding agent governance, Claude Code, Cursor, Codex, Ollama" />
 <link rel="canonical" href="https://loopgen.dev/" />
 <meta property="og:type" content="website" />
-<meta property="og:title" content="loopgen — run your AI's coding loop and prove its work passed" />
-<meta property="og:description" content="Any model can write an AGENTS.md. loopgen does what a stateless model can't: execute the loop, verify it, prove it, and enforce guardrails. Local-first, MIT." />
+<meta property="og:title" content="loopgen — verification &amp; provenance gate for AI-generated code" />
+<meta property="og:description" content="Bring your own agent. loopgen verifies the change and leaves tamper-evident evidence — or, in CI, a verifiable signed attestation you can gate merges on. Local-first, MIT." />
 <meta property="og:image" content="https://raw.githubusercontent.com/Nagiici/Loopgen/main/docs/demo.gif" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23c2362b'/></svg>" />
@@ -28,10 +28,10 @@
   </header>
 
   <section class="hero">
-    <p class="kicker">A verified runner for AI coding loops</p>
-    <h1 class="headline">Run your AI's coding loop — and prove its work actually passed.</h1>
-    <p class="standfirst">Any model can <em>write</em> an AGENTS.md. loopgen does the part a stateless model can't.</p>
-    <p class="lede">It <b>runs</b> a bounded loop, executes your real <code>test</code> / <code>lint</code> / <code>build</code> and <b>gates success on the exit codes</b>, <b>enforces</b> forbidden-path and iteration limits, and writes a <b>tamper-evident, hash-chained audit log + proof report</b>. Works with Claude Code, Codex, Cursor, and local models.</p>
+    <p class="kicker">Verification &amp; provenance gate for AI-generated code</p>
+    <h1 class="headline">Verify your AI's code — and prove it in CI.</h1>
+    <p class="standfirst">Bring your own agent. loopgen does the part a stateless model can't.</p>
+    <p class="lede">It <b>runs</b> your real <code>test</code> / <code>lint</code> / <code>build</code>, <b>gates on the exit codes</b>, <b>enforces</b> forbidden-path and iteration limits, and records the run in a hash-chained ledger. Locally that's <b>tamper-evident evidence</b>; in CI it signs the entry against the <b>Sigstore/Rekor</b> transparency log — a <b>verifiable, signed attestation</b> you can gate merges on. Works with Claude Code, Codex, Cursor, and local models.</p>
 
     <div class="cta">
       <span class="cmd"><span><span class="dollar">$</span> npx loopgen run test-repair</span><button data-copy="npx loopgen run test-repair">copy</button></span>
@@ -46,17 +46,17 @@
   </section>
 
   <section class="why">
-    <p>Any model can <em>generate</em> a config. loopgen does what a stateless model can't: <span class="sig">execute, verify, prove, and enforce.</span></p>
+    <p>Whoever writes the code, loopgen does what a stateless model can't: <span class="sig">execute, verify, attest, and govern.</span></p>
   </section>
 
   <section class="spread">
     <div class="spread-head">
       <span class="numeral" aria-hidden="true">01</span>
       <div>
-        <span class="tag">Prove the work</span>
-        <h2>Run the loop and prove it passed</h2>
-        <p>After you (or any agent — Claude Code, Cursor, Codex) make a bounded change, <code>loopgen run</code> diffs the working tree, runs your real verification commands, gates pass/fail on the exit codes, checks whether forbidden paths were touched, and writes a hash-chained audit + a human-readable proof report. Exits 0/1, so it drops straight into CI or a git hook.</p>
-        <pre><span class="c"># run + verify a loop; exits 0 on pass, 1 on fail</span>
+        <span class="tag">Verify &amp; attest</span>
+        <h2>Run the loop, verify it, and sign the proof</h2>
+        <p>After you (or any agent — Claude Code, Cursor, Codex) make a bounded change, <code>loopgen run</code> diffs the working tree, runs your real verification commands, gates pass/fail on the exit codes, checks whether forbidden paths were touched, and writes a hash-chained audit. Locally that's tamper-evident evidence; in CI it's signed against the Sigstore/Rekor public transparency log — a verifiable attestation. Exits 0/1, so it drops straight into CI or a git hook.</p>
+        <pre><span class="c"># run + verify; in CI, sign a verifiable attestation</span>
 npx loopgen run test-repair</pre>
       </div>
     </div>

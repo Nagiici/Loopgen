@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runDrivenLoop } from "./agent-loop.js";
+import { buildAttestationSubject, detectCiProvenance, produceAttestation } from "./attest.js";
 import { appendAuditEntry, hashEntry, readAuditLog } from "./audit.js";
 import { checkForbiddenPaths } from "./forbidden.js";
 import * as git from "./git.js";
@@ -12,6 +13,7 @@ import { resolveModelConfig } from "./model-config.js";
 import { renderProofReport } from "./report.js";
 import { runVerification } from "./verify.js";
 import type {
+  AttestationRef,
   AuditEntry,
   AuditEntryInput,
   ForbiddenPathResult,
@@ -20,8 +22,10 @@ import type {
   LoopFile,
   LoopSpec,
   RunOptions,
-  RunResult,
-  VerificationResult
+  RunProvenance,
+  TrustTier,
+  VerificationResult,
+  RunResult
 } from "./types.js";
 
 export async function runLoop(options: RunOptions): Promise<RunResult> {
@@ -59,6 +63,7 @@ async function runReferee(projectRoot: string, loop: LoopSpec, loopFile: LoopFil
   const passed = verification.passed && forbidden.ok;
 
   const input = baseEntry(loopFile, loop, "referee", { base, shaBefore, shaAfter, clean }, changed, diffstat, forbidden, verification, 1, passed);
+  input.provenance = resolveProvenance(options, { shaAfter, clean }, loop, verification);
   return finalize(projectRoot, loop, input, verification, forbidden, options);
 }
 
@@ -111,6 +116,7 @@ async function runDriven(projectRoot: string, loop: LoopSpec, loopFile: LoopFile
     passed
   );
   input.driven = { stopReason: driven.stopReason, model: modelMeta, attempts: summarizeIterations(driven.iterations) };
+  input.provenance = resolveProvenance(options, { shaAfter, clean }, loop, verification);
 
   return finalize(projectRoot, loop, input, verification, forbidden, options, driven.iterations);
 }
@@ -170,13 +176,27 @@ async function finalize(
     entry = await appendAuditEntry(projectRoot, input);
   }
 
+  // Root of trust: the signature's subject IS entry.hash, so this runs AFTER the entry is hashed and
+  // appended. A missing/failed signer never fails the run — it just leaves local-grade evidence.
+  let attestation: AttestationRef | undefined;
+  if (!options.dryRun && entry.provenance?.tier === "attested" && entry.provenance.subject) {
+    attestation = await produceAttestation({
+      projectRoot,
+      entryId: entry.entryId,
+      entryHash: entry.hash,
+      subject: entry.provenance.subject,
+      ci: entry.provenance.ci,
+      attestor: options.attestor
+    });
+  }
+
   let reportPath: string | undefined;
   if (!options.dryRun && options.writeReport !== false) {
     const stamp = entry.timestamp.replace(/[:.]/g, "-");
     reportPath = path.join(".loopgen", "reports", `${loop.id}-${stamp}.md`);
     const absolute = path.join(projectRoot, reportPath);
     await fs.mkdir(path.dirname(absolute), { recursive: true });
-    await fs.writeFile(absolute, renderProofReport(loop, entry, verification, iterationLogs), "utf8");
+    await fs.writeFile(absolute, renderProofReport(loop, entry, verification, iterationLogs, attestation), "utf8");
   }
 
   if (!options.dryRun) {
@@ -191,8 +211,25 @@ async function finalize(
     forbidden,
     reportPath,
     dryRun: Boolean(options.dryRun),
-    iterationLogs
+    iterationLogs,
+    attestation
   };
+}
+
+// Capture the trust tier + CI/OIDC claims + the digest set a signature will bind to.
+// All fields are known BEFORE the entry is hashed, so this rides the chain like `driven`.
+function resolveProvenance(
+  options: RunOptions,
+  gitInfo: { shaAfter: string | null; clean: boolean },
+  loop: LoopSpec,
+  verification: VerificationResult
+): RunProvenance {
+  const { ci, canAttest } = detectCiProvenance();
+  const subject = buildAttestationSubject(gitInfo, loop, verification);
+  // Default: auto-attest when an ambient OIDC identity exists; --attest forces, --no-attest disables.
+  const requested = options.attest === undefined ? canAttest : options.attest;
+  const tier: TrustTier = requested && Boolean(ci) && canAttest ? "attested" : "local";
+  return { tier, ci, subject };
 }
 
 function summarizeIterations(logs: IterationLog[]): IterationSummary[] {

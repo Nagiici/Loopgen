@@ -4,24 +4,28 @@
 [![CI](https://github.com/Nagiici/Loopgen/actions/workflows/ci.yml/badge.svg)](https://github.com/Nagiici/Loopgen/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Run your AI's coding loop — and prove its work actually passed.**
+**The vendor-neutral verification & provenance gate for AI-generated code — bring your own agent.**
 
-Any model can *write* an `AGENTS.md`. loopgen does the part a stateless model can't: it **runs** a bounded
-loop, executes your real `test` / `lint` / `build` and **gates success on the exit codes**, **enforces**
-forbidden-path and iteration limits, and writes a **tamper-evident, hash-chained audit log + proof report**.
-Works with Claude Code, Codex, Cursor, and local models (Ollama, LM Studio, llama.cpp).
+Whatever agent writes the code — Claude Code, Codex, Cursor, or a local model — loopgen does the part a
+stateless model can't: it **runs** your real `test` / `lint` / `build`, **gates on the exit codes**,
+**enforces** forbidden-path and iteration limits, and records the run in a hash-chained ledger. Locally
+that's **tamper-evident evidence**; in CI it signs the entry against the **Sigstore/Rekor** public
+transparency log — a **verifiable, signed attestation** you can gate merges on.
 
 ```bash
 npx loopgen init             # scan your repo + pick bounded-loop templates (local wizard, nothing written)
-npx loopgen run test-repair  # run the loop, verify it, and leave proof it passed (exits 0/1 for CI)
+npx loopgen run test-repair  # run + verify the loop; leave tamper-evident evidence (signed in CI) — exits 0/1
 ```
 
-- ✅ **Prove the work** — `loopgen run` executes a loop, gates on your *real* verification commands, and
-  writes an auditable record a chatbot cannot. *Referee* mode verifies any agent's change; *driven* mode
-  drives a **local model** itself and **blocks forbidden writes before they land**.
+- ✅ **Verify the work** — `loopgen run` executes a loop, gates on your *real* verification commands, checks
+  forbidden paths, and writes a hash-chained audit a chatbot cannot. *Referee* mode verifies any agent's
+  change; *driven* mode drives a **local model** itself and **blocks forbidden writes before they land**.
+- 🔏 **Attest the work** — run it in CI and loopgen signs the audit entry against the **Sigstore/Rekor**
+  public transparency log (keyless — no keys to manage): a **verifiable, signed attestation** bound to the
+  commit, not just a local self-attested log. [Evidence vs. proof →](docs/THREAT-MODEL.md)
 - 🧾 **Govern the agents** — `loopgen audit` rolls up every dev's hash-chained ledger into a report + a
   self-contained HTML dashboard, and a CI **merge gate** (`audit check`, also a GitHub Action) blocks PRs
-  that lack passing, untampered proof.
+  that lack passing, untampered — and optionally **attested** — proof.
 - 🏠 **Local-first & open source (MIT)** — no telemetry, no cloud; drives only your local models; API keys
   are referenced by env-var name only.
 
@@ -35,20 +39,23 @@ npx loopgen run test-repair  # run the loop, verify it, and leave proof it passe
 
 ### 项目简介
 
-**跑你的 AI 编码循环 —— 并证明它的工作真的通过了。** 任何模型都能*写*一个 `AGENTS.md`;loopgen 做的是
-模型本身做不到的那部分:**执行**一个有界循环,跑你真实的 `test` / `lint` / `build` 并**按退出码判定通过/
-失败**,**强制**禁止路径与迭代上限,并写下一条**带哈希链、防篡改的审计 + 证明报告**。支持 Claude Code、
-Codex、Cursor 和本地模型(Ollama、LM Studio、llama.cpp)。
+**面向 AI 生成代码的厂商中立「验证 + 溯源」闸门 —— 自带 agent。** 无论代码由谁写(Claude Code、Codex、
+Cursor 或本地模型),loopgen 做的是无状态模型做不到的那部分:**执行**你真实的 `test` / `lint` / `build`、
+**按退出码判定**、**强制**禁止路径与迭代上限,并把这次运行记进一条哈希链账本。本地运行得到的是**防篡改证据
+(tamper-evident evidence)**;在 CI 里它会把这条记录对 **Sigstore/Rekor** 公开透明日志签名 —— 一份可被
+第三方校验的**签名证明(attestation)**,可直接用于合并闸门。
 
 ```bash
 npx loopgen init             # 扫描仓库 + 选择有界循环模板(本地向导,不写文件)
 npx loopgen run test-repair  # 跑这个循环、验证它,并留下「通过」的证据(退出码 0/1,可接 CI)
 ```
 
-- ✅ **证明工作** —— `loopgen run` 执行循环、按你的真实验证命令判定、写下 chatbot 做不到的可审计记录。
-  *referee* 模式验证任意 agent 的改动;*driven* 模式自己驱动**本地模型**,并在**落盘前拦截禁止路径写入**。
+- ✅ **验证工作** —— `loopgen run` 执行循环、按你的真实验证命令判定、检查禁止路径,写下 chatbot 做不到的
+  哈希链审计。*referee* 模式验证任意 agent 的改动;*driven* 模式自己驱动**本地模型**,并在**落盘前拦截禁止路径写入**。
+- 🔏 **签名证明** —— 在 CI 里运行,loopgen 会把审计条目对 **Sigstore/Rekor** 公开透明日志签名(keyless,
+  无需自管密钥):一份绑定 commit、**可被第三方校验的签名证明**,而非仅本地自证日志。[证据 vs 证明 →](docs/THREAT-MODEL.md)
 - 🧾 **治理 agent** —— `loopgen audit` 把每个开发者的哈希链账本聚合成报告 + 自包含 HTML 看板,CI **合并闸门**
-  (`audit check`,也有现成 GitHub Action)挡住「缺少通过/未被篡改证据」的 PR。
+  (`audit check`,也有现成 GitHub Action)挡住「缺少通过/未被篡改、以及可选未签名证明」的 PR。
 - 🏠 **local-first & 开源(MIT)** —— 无遥测、无云调用;只驱动你的本地模型;API key 仅按环境变量名引用。
 
 > 仍可先用内置 demo 预览:`loopgen init` 不需要真实项目、也不会写入文件。生成的可审查文件包括
@@ -433,11 +440,11 @@ npm run loopgen -- run [loop] [project]
 
 `apply` always shows a diff first. Without `--yes`, it asks for confirmation before writing files.
 
-### Run & prove the work (`loopgen run`)
+### Verify & attest the work (`loopgen run`)
 
-Generating config is just instructions. **`loopgen run` actually runs the verification and leaves proof** —
-something a stateless model cannot do. After you (or any agent — Claude Code, Cursor, Codex) complete a
-bounded change, run:
+Generating config is just instructions. **`loopgen run` actually runs the verification and leaves a
+tamper-evident record** — something a stateless model cannot do. After you (or any agent — Claude Code,
+Cursor, Codex) complete a bounded change, run:
 
 ```bash
 npm run loopgen -- run test-repair .
@@ -450,8 +457,13 @@ in `.loopgen/reports/*.md`. The process exits `0` on pass and `1` on fail, so it
 
 - `--dry-run` — run the checks, write nothing.
 - `--base <ref>` — git ref to diff against (default `HEAD`).
-- Scope: referee mode is **detection, not a sandbox** — it proves the change passed your real verification
-  and didn't modify forbidden paths; it does not block reads or out-of-tree writes.
+- Scope: referee mode is **detection, not a sandbox** — it records that the change passed your real
+  verification and didn't modify forbidden paths; it does not block reads or out-of-tree writes.
+- Trust: locally this is **tamper-evident evidence**. Run it in CI and loopgen signs the audit entry against
+  the **Sigstore/Rekor** public transparency log — a **verifiable, signed attestation** bound to the commit.
+  Attestation is automatic in CI with an OIDC identity (`--no-attest` to opt out); verify it with `loopgen
+  audit verify --attestation`. See [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) for what each tier does and
+  doesn't prove.
 
 #### Driven mode — loopgen runs the loop (`--mode driven`)
 
@@ -482,10 +494,12 @@ Every `loopgen run` appends to a per-repo, hash-chained `.loopgen/audit.jsonl`. 
 those ledgers into team-level, compliance-ready evidence and a CI gate — local-first, no server:
 
 ```bash
-npm run loopgen -- audit verify                  # prove the hash chain is intact (tamper check)
+npm run loopgen -- audit verify                  # verify the hash chain is intact (tamper check)
+npm run loopgen -- audit verify --attestation    # also cryptographically verify the CI signatures
 npm run loopgen -- audit summary                 # one repo: pass rate, by loop, violations
 npm run loopgen -- audit aggregate ../repos --html gov.html --report gov.md   # roll up many repos/devs
 npm run loopgen -- audit check --require test-repair --require-no-violations --require-chain   # CI gate
+npm run loopgen -- audit check --require-attested # gate on a verifiable CI attestation, not just a local log
 ```
 
 `aggregate` scans the given files/directories for `audit.jsonl`, merges them into one rollup, and can write

@@ -22,7 +22,7 @@ let counter = 0;
 function input(
   loopId: string,
   passed: boolean,
-  opts: { actor?: string; mode?: "referee" | "driven"; forbiddenOk?: boolean; ts?: string } = {}
+  opts: { actor?: string; mode?: "referee" | "driven"; forbiddenOk?: boolean; ts?: string; tier?: "local" | "attested" } = {}
 ): AuditEntryInput {
   const ok = opts.forbiddenOk ?? true;
   return {
@@ -38,7 +38,8 @@ function input(
     forbidden: { ok, violations: ok ? [] : [{ file: ".env", pattern: ".env" }] },
     verification: { passed, commands: [] },
     iterations: 1,
-    passed
+    passed,
+    ...(opts.tier ? { provenance: { tier: opts.tier } } : {})
   };
 }
 
@@ -118,6 +119,25 @@ describe("governance", () => {
     expect(summary.chain.valid).toBe(false);
     const entries = await readAuditFile(file);
     expect(evaluatePolicy(entries, { requireChainValid: true }).ok).toBe(false);
+  });
+
+  test("byTier counts trust tiers and requireAttested gates on the in-band claim", async () => {
+    const root = await tempRoot();
+    await appendAuditEntry(root, input("a", true, { tier: "attested" }));
+    await appendAuditEntry(root, input("a", true)); // local (no provenance)
+    const { summary } = await buildSummary([{ label: ".", filePath: auditPath(root) }]);
+    expect(summary.byTier).toEqual({ local: 1, attested: 1 });
+    const entries = await readAuditFile(auditPath(root));
+    // one run is only local self-attestation → the gate fails
+    expect(evaluatePolicy(entries, { requireAttested: true }).ok).toBe(false);
+  });
+
+  test("requireAttested passes when every run is CI-attested", async () => {
+    const root = await tempRoot();
+    await appendAuditEntry(root, input("a", true, { tier: "attested" }));
+    await appendAuditEntry(root, input("b", true, { tier: "attested" }));
+    const entries = await readAuditFile(auditPath(root));
+    expect(evaluatePolicy(entries, { requireAttested: true }).ok).toBe(true);
   });
 
   test("renderers produce markdown and self-contained HTML", async () => {

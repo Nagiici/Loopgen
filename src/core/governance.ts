@@ -65,6 +65,7 @@ function summarizeEntries(
   const byLoop: GovernanceSummary["byLoop"] = {};
   const byActor: GovernanceSummary["byActor"] = {};
   const byMode = { referee: 0, driven: 0 };
+  const byTier = { local: 0, attested: 0 };
   let passed = 0;
   let blockedAttempts = 0;
   let forbiddenViolationRuns = 0;
@@ -75,6 +76,8 @@ function summarizeEntries(
     if (entry.passed) passed += 1;
     if (entry.mode === "driven") byMode.driven += 1;
     else byMode.referee += 1;
+    if (entry.provenance?.tier === "attested") byTier.attested += 1;
+    else byTier.local += 1;
 
     byLoop[entry.loopId] ??= { total: 0, passed: 0 };
     byLoop[entry.loopId].total += 1;
@@ -101,6 +104,7 @@ function summarizeEntries(
     passRate: total ? passed / total : 0,
     byLoop,
     byMode,
+    byTier,
     byActor,
     blockedAttempts,
     forbiddenViolationRuns,
@@ -123,6 +127,11 @@ export function evaluatePolicy(entries: AuditEntry[], policy: AuditPolicy): Poli
   if (policy.requireNoViolations) {
     const violations = scoped.filter((entry) => !entry.forbidden.ok);
     if (violations.length) failures.push(`${violations.length} run(s) modified forbidden paths`);
+  }
+  if (policy.requireAttested) {
+    // Checks the in-band claim only; cryptographic verification is `loopgen audit verify --attestation`.
+    const notAttested = scoped.filter((entry) => entry.provenance?.tier !== "attested");
+    if (notAttested.length) failures.push(`${notAttested.length} run(s) are not CI-attested (local self-attested only)`);
   }
   for (const loopId of policy.requireLoops ?? []) {
     const ok = scoped.some((entry) => entry.loopId === loopId && entry.passed);
