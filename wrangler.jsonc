@@ -1,9 +1,0 @@
-{
-  // Cloudflare Worker (static assets only): serve the marketing site in ./site,
-  // NOT the wizard build in dist-web. `npx wrangler deploy` reads this.
-  "name": "loopgen",
-  "compatibility_date": "2026-06-17",
-  "assets": {
-    "directory": "./site"
-  }
-}
