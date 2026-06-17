@@ -1,6 +1,6 @@
 {
   "name": "loopgen",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "The vendor-neutral verification & provenance gate for AI-generated code — bring your own agent. Local runs leave tamper-evident evidence; CI runs produce a verifiable, signed attestation (Sigstore/SLSA) you can gate merges on.",
   "type": "module",
   "engines": {
