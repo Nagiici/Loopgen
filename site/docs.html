@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>loopgen docs — quick start &amp; commands</title>
+<meta name="description" content="loopgen quick start and command reference: loopgen run (verify + prove), driven mode, and the loopgen audit governance toolkit + CI gate." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23c2362b'/></svg>" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <a class="wordmark" href="index.html" style="text-decoration:none">loopgen</a>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/Nagiici/Loopgen">GitHub</a>
+      <a href="https://www.npmjs.com/package/loopgen">npm</a>
+    </nav>
+  </header>
+
+  <div class="doc" style="padding:40px 0 16px">
+    <p class="kicker">Documentation</p>
+    <h1 class="headline" style="font-size:clamp(2rem,5vw,3rem)">Quick start &amp; commands</h1>
+    <p style="color:var(--muted);max-width:64ch">loopgen is a local-first CLI. Install nothing — run it with <code>npx</code>. Full docs live in the <a href="https://github.com/Nagiici/Loopgen#readme">GitHub README</a> (also bilingual EN/ZH).</p>
+
+    <h2>1. Generate a loop, then run it</h2>
+    <p><code>loopgen init</code> / <code>apply</code> scans your repo and writes inspectable bounded-loop configs to <code>.loopgen/loopgen.loop.yaml</code>. <code>loopgen run</code> then executes one — running your real verification and leaving proof.</p>
+    <pre>npx loopgen init                 <span class="c"># local wizard, nothing written</span>
+npx loopgen run test-repair      <span class="c"># run + verify a loop; exits 0/1 for CI</span></pre>
+    <p><code>loopgen run</code> diffs the working tree, runs the loop's <code>verification.commands</code> (gating on exit codes), checks <code>forbiddenPaths</code>, and writes a hash-chained <code>.loopgen/audit.jsonl</code> + a markdown proof report in <code>.loopgen/reports/</code>.</p>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--dry-run</code></td><td>Run the checks, write nothing.</td></tr>
+        <tr><td><code>--base &lt;ref&gt;</code></td><td>Git ref to diff against (default <code>HEAD</code>).</td></tr>
+        <tr><td><code>--json</code></td><td>Print the run result as JSON.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2. Driven mode — loopgen runs the loop</h2>
+    <p>Drive a <strong>local</strong> model through the loop; guardrails are enforced at apply time (forbidden-path writes blocked before they land, command allowlist, iteration/timeout caps).</p>
+    <pre>npx loopgen run test-repair --mode driven \
+  --adapter ollama --ollama-model qwen2.5-coder</pre>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--adapter</code></td><td><code>ollama</code> | <code>openai-compatible</code></td></tr>
+        <tr><td><code>--ollama-model</code> / <code>--openai-compatible-model</code></td><td>Model name (or set it in <code>.loopgen/adapters/&lt;id&gt;/config.json</code>).</td></tr>
+        <tr><td><code>--max-iterations &lt;n&gt;</code></td><td>Override the loop's iteration cap.</td></tr>
+        <tr><td><code>--allow-dirty</code></td><td>Run with a dirty working tree.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. Governance — <code>loopgen audit</code></h2>
+    <p>Turn per-repo ledgers into team evidence and a CI gate. Local-first, no server.</p>
+    <pre>npx loopgen audit verify                 <span class="c"># prove the hash chain is intact</span>
+npx loopgen audit summary                <span class="c"># one repo: pass rate, by loop, violations</span>
+npx loopgen audit aggregate ./repos --html gov.html --report gov.md
+npx loopgen audit check --require test-repair --require-no-violations --require-chain</pre>
+    <p><code>audit check</code> exits non-zero if a required loop has no passing run, a run touched forbidden paths, or the chain is broken — wire it into CI to block merges on missing or tampered proof.</p>
+
+    <h3>GitHub Action</h3>
+    <pre>- uses: Nagiici/Loopgen/.github/actions/audit-check@v0.6.2
+  with:
+    require: test-repair,ci-failure-repair
+    require-no-violations: "true"
+    require-chain: "true"</pre>
+
+    <h2>Honest scope</h2>
+    <p>Referee mode is <strong>detection</strong> (post-hoc git diff). Driven mode <strong>enforces at apply time</strong> but is not a sandbox — the model still proposes; loopgen bounds, confines, verifies, and proves. No telemetry; only your local models are called; API keys are referenced by env-var name only.</p>
+  </div>
+
+  <footer>
+    <div class="flinks">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/Nagiici/Loopgen">GitHub</a>
+      <a href="https://www.npmjs.com/package/loopgen">npm</a>
+      <a href="https://github.com/Nagiici/Loopgen#readme">Full README</a>
+    </div>
+    Local-first &amp; open source (MIT).
+  </footer>
+
+</div>
+</body>
+</html>
