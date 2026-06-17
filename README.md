@@ -139,9 +139,28 @@ npm run loopgen -- preview [project] --templates all --adapters codex,claude
 npm run loopgen -- preview [project] --templates test-repair --adapters ollama --ollama-model llama3.1
 npm run loopgen -- preview [project] --templates test-repair --adapters openai-compatible --openai-compatible-model qwen2.5-coder
 npm run loopgen -- apply [project] --templates all --adapters codex,claude
+npm run loopgen -- run [loop] [project]
 ```
 
 `apply` 会先展示 diff。没有 `--yes` 时，它会要求你确认后才写入文件。
+
+### 运行并验证（loopgen run）
+
+生成配置只是说明，**`loopgen run` 会真正执行验证并留下证据** —— 这是模型本身做不到的。
+在用任意 agent（Claude Code、Cursor、Codex 等）完成一段有界的改动后,运行:
+
+```bash
+npm run loopgen -- run test-repair .
+```
+
+它会:对照 git 跑出本次改动 → 执行该 loop 的 `verification.commands` 并按退出码判定通过/失败 →
+检查是否动了 `forbiddenPaths`(如 `.env`)→ 写入一条**带哈希链、防篡改**的审计记录
+`.loopgen/audit.jsonl`,以及一份可读的「证明报告」`.loopgen/reports/*.md`。通过则进程退出码为 0,
+失败为 1(便于接入 CI / git hook)。
+
+- `--dry-run`:只检查、不写文件。
+- `--base <ref>`:指定对比的 git ref(默认 `HEAD`)。
+- 说明:v1 是**事后检测,而非沙箱阻断**——它证明改动通过了你的真实验证、且没有改动禁止路径。
 
 可用 adapter：
 
@@ -350,9 +369,30 @@ npm run loopgen -- preview [project] --templates all --adapters codex,claude
 npm run loopgen -- preview [project] --templates test-repair --adapters ollama --ollama-model llama3.1
 npm run loopgen -- preview [project] --templates test-repair --adapters openai-compatible --openai-compatible-model qwen2.5-coder
 npm run loopgen -- apply [project] --templates all --adapters codex,claude
+npm run loopgen -- run [loop] [project]
 ```
 
 `apply` always shows a diff first. Without `--yes`, it asks for confirmation before writing files.
+
+### Run & prove the work (`loopgen run`)
+
+Generating config is just instructions. **`loopgen run` actually runs the verification and leaves proof** —
+something a stateless model cannot do. After you (or any agent — Claude Code, Cursor, Codex) complete a
+bounded change, run:
+
+```bash
+npm run loopgen -- run test-repair .
+```
+
+It diffs your working tree against git, executes the loop's `verification.commands` and gates pass/fail on
+the real exit codes, checks whether any `forbiddenPaths` (e.g. `.env`) were touched, and writes a
+**tamper-evident, hash-chained audit record** to `.loopgen/audit.jsonl` plus a human-readable proof report
+in `.loopgen/reports/*.md`. The process exits `0` on pass and `1` on fail, so it composes into CI / git hooks.
+
+- `--dry-run` — run the checks, write nothing.
+- `--base <ref>` — git ref to diff against (default `HEAD`).
+- Scope: v1 is **detection, not a sandbox** — it proves the change passed your real verification and didn't
+  modify forbidden paths; it does not block reads or out-of-tree writes.
 
 Available adapters:
 

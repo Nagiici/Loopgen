@@ -155,3 +155,82 @@ export interface GenerationResult {
   diff: string;
   warnings: string[];
 }
+
+// ---------- verified runner (`loopgen run`) ----------
+
+export interface LoopFile {
+  version: string;
+  project: string;
+  loops: LoopSpec[];
+}
+
+export interface CommandRunResult {
+  command: string;
+  exitCode: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  durationMs: number;
+  stdoutExcerpt: string;
+  stderrExcerpt: string;
+}
+
+export interface VerificationResult {
+  passed: boolean;
+  results: CommandRunResult[];
+  warnings: string[];
+}
+
+export interface ForbiddenPathViolation {
+  file: string;
+  pattern: string;
+}
+
+export interface ForbiddenPathResult {
+  ok: boolean;
+  violations: ForbiddenPathViolation[];
+}
+
+export type RunMode = "referee" | "driven";
+
+export interface AuditEntry {
+  schemaVersion: "1";
+  entryId: string;
+  timestamp: string;
+  project: string;
+  loopId: string;
+  mode: RunMode;
+  actor: { user?: string; host?: string };
+  git: { base: string; shaBefore: string | null; shaAfter: string | null; clean: boolean };
+  changedFiles: { tracked: string[]; untracked: string[]; diffstat: string };
+  forbidden: { ok: boolean; violations: ForbiddenPathViolation[] };
+  verification: {
+    passed: boolean;
+    commands: Array<{ command: string; exitCode: number | null; timedOut: boolean; durationMs: number }>;
+  };
+  iterations: number;
+  passed: boolean;
+  prevHash: string | null;
+  hash: string;
+}
+
+export type AuditEntryInput = Omit<AuditEntry, "prevHash" | "hash">;
+
+export interface RunOptions {
+  projectRoot: string;
+  loopId?: string;
+  loopsFile?: string;
+  mode?: RunMode;
+  base?: string;
+  dryRun?: boolean;
+  writeReport?: boolean;
+}
+
+export interface RunResult {
+  loop: LoopSpec;
+  passed: boolean;
+  entry: AuditEntry;
+  verification: VerificationResult;
+  forbidden: ForbiddenPathResult;
+  reportPath?: string;
+  dryRun: boolean;
+}

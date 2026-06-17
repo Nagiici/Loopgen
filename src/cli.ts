@@ -12,7 +12,8 @@ import { scanProject } from "./core/scanner.js";
 import { TEMPLATE_DEFINITIONS } from "./core/templates.js";
 import { startLoopgenServer } from "./server.js";
 import { DEFAULT_ADAPTER_IDS, parseAdapterIds } from "./core/adapters.js";
-import type { AdapterConfigMap, AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId } from "./core/types.js";
+import { runLoop } from "./core/runner.js";
+import type { AdapterConfigMap, AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId, RunMode } from "./core/types.js";
 
 const PROJECT_MANIFESTS = [
   "package.json",
@@ -158,6 +159,41 @@ program
     console.log(`Wrote ${written.length} files.`);
   });
 
+program
+  .command("run")
+  .argument("[loop]", "loop id from .loopgen/loopgen.loop.yaml")
+  .argument("[project]", "project directory", ".")
+  .option("--mode <mode>", "referee | driven", "referee")
+  .option("--base <ref>", "git ref to diff the working tree against", "HEAD")
+  .option("--loops-file <path>", "path to the loop file")
+  .option("--json", "print the run result as JSON")
+  .option("--dry-run", "run checks without writing audit, report, or state")
+  .option("--no-report", "do not write the markdown proof report")
+  .description("Run a loop's verification against the working tree and write a tamper-evident proof.")
+  .action(
+    async (
+      loop: string | undefined,
+      project: string,
+      options: { mode?: string; base?: string; loopsFile?: string; json?: boolean; dryRun?: boolean; report?: boolean }
+    ) => {
+      const result = await runLoop({
+        projectRoot: path.resolve(project),
+        loopId: loop,
+        mode: (options.mode as RunMode) ?? "referee",
+        base: options.base,
+        loopsFile: options.loopsFile,
+        dryRun: options.dryRun,
+        writeReport: options.report
+      });
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        printRunResult(result);
+      }
+      process.exitCode = result.passed ? 0 : 1;
+    }
+  );
+
 program.parseAsync(process.argv).catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
@@ -227,6 +263,24 @@ function printGenerationSummary(result: Awaited<ReturnType<typeof generateLoopPr
   for (const warning of result.warnings) {
     console.warn(`Warning: ${warning}`);
   }
+}
+
+function printRunResult(result: Awaited<ReturnType<typeof runLoop>>) {
+  console.log(`${result.passed ? "PASS" : "FAIL"} — loop ${result.loop.id} (${result.entry.mode}${result.dryRun ? ", dry-run" : ""})`);
+  for (const command of result.verification.results) {
+    const mark = command.timedOut ? "timeout" : command.exitCode === 0 ? "ok" : `exit ${command.exitCode}`;
+    console.log(`  verify: ${command.command} — ${mark}`);
+  }
+  if (!result.verification.results.length) {
+    console.log("  verify: no verification commands configured for this loop");
+  }
+  for (const violation of result.forbidden.violations) {
+    console.log(`  forbidden: ${violation.file} (matched ${violation.pattern})`);
+  }
+  const changed = result.entry.changedFiles.tracked.length + result.entry.changedFiles.untracked.length;
+  console.log(`  files changed: ${changed}`);
+  if (result.reportPath) console.log(`  report: ${result.reportPath}`);
+  if (!result.dryRun) console.log(`  audit: .loopgen/audit.jsonl (${result.entry.hash.slice(0, 12)}…)`);
 }
 
 function formatCommands(commands: object) {
