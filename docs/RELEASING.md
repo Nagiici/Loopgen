@@ -4,27 +4,23 @@ loopgen publishes to npm automatically when a `v*` tag is pushed (see
 [`.github/workflows/publish.yml`](../.github/workflows/publish.yml)). This guide covers the
 one-time setup and the per-release steps.
 
-## One-time setup: an npm token for CI
+## One-time setup: npm Trusted Publishing (OIDC)
 
-1. On [npmjs.com](https://www.npmjs.com), go to your avatar → **Access Tokens** →
-   **Generate New Token** → **Granular Access Token**.
-2. Name it `loopgen-ci-publish` and set an expiration (e.g. 90 days).
-3. Under **Packages and scopes**, set **Permissions: Read and write**, and scope it to **only**
-   the `loopgen` package (least privilege).
-4. Generate the token and copy it (shown once). A granular write token can publish from CI
-   **without a 2FA one-time code**.
-5. Add it as a repository secret named `NPM_TOKEN` — do not paste it anywhere public:
-   ```bash
-   gh secret set NPM_TOKEN --repo Nagiici/Loopgen   # paste the token at the prompt
-   ```
-   Or via GitHub: **Settings → Secrets and variables → Actions → New repository secret**.
-6. Verify it exists:
-   ```bash
-   gh secret list --repo Nagiici/Loopgen            # should list NPM_TOKEN
-   ```
+No token is needed — the workflow authenticates to npm via GitHub Actions OIDC (more secure than a
+long-lived `NPM_TOKEN`). Configure the trusted publisher once:
 
-The publish workflow already references `secrets.NPM_TOKEN`, publishes with provenance, and skips
-if the version is already on npm — no workflow changes needed.
+1. On [npmjs.com/package/loopgen](https://www.npmjs.com/package/loopgen) → **Settings** →
+   **Trusted Publisher** → select **GitHub Actions**.
+2. Fill in exactly (placeholders are not values — type each one):
+   - **Organization or user:** `Nagiici`
+   - **Repository:** `Loopgen` (just the name, not a URL)
+   - **Workflow filename:** `publish.yml` (filename only, no `.github/workflows/` path)
+   - **Environment name:** leave empty
+3. Keep **Allow npm publish** checked, then click **Save changes**.
+
+The workflow (`.github/workflows/publish.yml`) has `id-token: write`, upgrades npm to a version that
+supports trusted publishing, runs `npm publish --provenance`, and skips if the version is already on
+npm — no `NPM_TOKEN` secret required.
 
 ## Each release
 
