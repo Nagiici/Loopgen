@@ -182,7 +182,8 @@ program
   .option("--openai-compatible-model <model>", "driven mode: OpenAI-compatible model name")
   .option("--openai-compatible-base-url <url>", "driven mode: OpenAI-compatible base URL")
   .option("--openai-compatible-api-key-env <name>", "driven mode: env var name for the API key")
-  .option("--no-attest", "skip signing the audit entry even in CI (attestation is automatic when an OIDC identity is present)")
+  .option("--attest", "sign the audit entry against Sigstore/Rekor (default: automatic in CI with an OIDC identity)")
+  .option("--no-attest", "skip signing the audit entry, even in CI")
   .description("Run a loop's verification against the working tree; leaves tamper-evident evidence locally, or a verifiable signed attestation in CI.")
   .action(
     async (
