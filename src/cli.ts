@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
@@ -12,11 +13,27 @@ import { startLoopgenServer } from "./server.js";
 import { DEFAULT_ADAPTER_IDS, parseAdapterIds } from "./core/adapters.js";
 import type { AdapterConfigMap, AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId } from "./core/types.js";
 
+const PROJECT_MANIFESTS = [
+  "package.json",
+  "pyproject.toml",
+  "requirements.txt",
+  "go.mod",
+  "Cargo.toml",
+  "pom.xml",
+  "build.gradle",
+  "Gemfile",
+  "composer.json"
+];
+
+function looksLikeProject(dir: string): boolean {
+  return PROJECT_MANIFESTS.some((file) => existsSync(path.join(dir, file)));
+}
+
 const program = new Command();
 
 program
   .name("loopgen")
-  .description("Local-first loop engineering generator for Codex, Claude, and local model runtimes.")
+  .description("Generate bounded, verifiable AI agent configs for Codex, Claude, Cursor, and local models — with safety rails baked in.")
   .version("0.1.0");
 
 program
@@ -28,15 +45,22 @@ program
   .description("Start the local Web wizard.")
   .action(async (project: string, options: { port: string; host: string; open: boolean }) => {
     const projectRoot = path.resolve(project);
+    const isProject = looksLikeProject(projectRoot);
     const { url } = await startLoopgenServer({
       projectRoot,
       host: options.host,
       port: Number(options.port)
     });
+    const openUrl = isProject ? `${url}/?project=${encodeURIComponent(projectRoot)}` : url;
     console.log(`loopgen wizard running at ${url}`);
-    console.log(`Project: ${projectRoot}`);
+    if (isProject) {
+      console.log(`Project: ${projectRoot}`);
+    } else {
+      console.log("No project manifest detected here — opening the built-in demo so you can explore safely.");
+      console.log("Run `loopgen init <path-to-your-project>` to scan a real project.");
+    }
     if (options.open) {
-      openBrowser(url);
+      openBrowser(openUrl);
     }
   });
 

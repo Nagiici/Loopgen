@@ -1,11 +1,30 @@
 # loopgen
 
-`loopgen` is a local-first loop engineering generator.
+[![npm version](https://img.shields.io/npm/v/loopgen.svg)](https://www.npmjs.com/package/loopgen)
+[![CI](https://github.com/Nagiici/Loopgen/actions/workflows/ci.yml/badge.svg)](https://github.com/Nagiici/Loopgen/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-`loopgen` 是一个本地优先的 Loop Engineering 生成器，帮助开发者和技术相关角色快速体验、生成并落地可验证的 agent loop。
+**AI coding assistants can make unlimited changes. loopgen generates the guardrails.**
 
-- 中文说明见：[中文](#中文)
-- English documentation: [English](#english)
+loopgen scans your project and generates bounded, inspectable **agent loop** configs — so your own
+CI, tests, and lint verify every iteration before it goes further. Works with Claude Code, Codex,
+Cursor, and local models (Ollama, LM Studio, llama.cpp).
+
+```bash
+npx loopgen init      # opens a local wizard in demo mode — no setup, nothing written to your project
+```
+
+> **What's a "loop"?** A bounded, verifiable cycle: make the smallest change → run your verification
+> commands → log what happened to a state file → stop or repeat, up to a hard iteration limit.
+
+- 🛡️ **Safety by default** — bounded iterations (default 3), required verification, forbidden secret
+  paths, maker/checker separation, and a state-file audit log.
+- 🔌 **Tool-agnostic** — one scan generates config for Codex, Claude, Cursor, and local runtimes.
+- 🏠 **Local-first** — no telemetry, no cloud calls; API keys are referenced by env-var name only.
+
+<!-- TODO: add a 15s demo GIF of the wizard (scan → preview diff → apply) here. -->
+
+📖 中文说明见 [中文](#中文) · English documentation [below](#english).
 
 ---
 
@@ -23,18 +42,25 @@
 
 核心目标是降低使用门槛：你可以先用内置 demo 项目预览效果，不需要接入真实项目，也不会写入真实项目文件。
 
+### 适合谁先尝试
+
+如果你有一个带 npm scripts 和 GitHub Actions 的 TypeScript/Node 项目，并且已经在用 Claude Code、Codex 或
+Cursor，loopgen 能自动识别你的 test/lint/build 命令，并在 5 分钟内生成可直接使用的 agent 配置。其他角色（QA、
+Ops、Product 等）也有对应模板。
+
 ### 快速上手
 
-#### 1. 安装依赖并构建
+#### 最快方式：npx（无需克隆）
+
+```bash
+npx loopgen init      # 在 demo 模式下打开本地向导，无需配置，也不会写入文件
+```
+
+#### 从源码运行（开发场景）
 
 ```bash
 npm install
 npm run build
-```
-
-#### 2. 用内置 demo 快速体验
-
-```bash
 npm run loopgen -- scan --demo
 npm run loopgen -- preview --demo
 ```
@@ -119,8 +145,11 @@ npm run loopgen -- apply [project] --templates all --adapters codex,claude
 
 可用 adapter：
 
+- `agents-md`：通用 `AGENTS.md`，可被 Claude Code、Codex、Cursor、Copilot、Gemini CLI、Aider 等读取
 - `codex`
 - `claude`
+- `cursor`：`.cursor/rules/*.mdc` 规则
+- `windsurf`：`.windsurfrules`
 - `ollama`
 - `openai-compatible`
 
@@ -149,8 +178,10 @@ npm run loopgen -- apply [project] --templates all --adapters codex,claude
 - `.loopgen/loopgen.loop.yaml`：中间 loop 表示。
 - `.loopgen/playbooks/*.md`：通用 loop playbook。
 - `.loopgen/state/*.md`：循环状态、尝试记录和阻塞点。
+- `AGENTS.md`：通用 agent 指令文件，可被大多数 AI 编码工具读取。
 - `.codex/skills/*`、`.codex/automations/*`、`.codex/agents/*`：Codex 适配输出。
 - `.claude/skills/*`、`.claude/loops/*`、`.claude/agents/*`：Claude 适配输出。
+- `.cursor/rules/*.mdc` 与 `.windsurfrules`：Cursor 与 Windsurf 规则。
 - `.loopgen/adapters/ollama/config.json` 与 `.loopgen/adapters/ollama/*.md`：Ollama 本地运行时配置和 runbook。
 - `.loopgen/adapters/openai-compatible/config.json` 与 `.loopgen/adapters/openai-compatible/*.md`：OpenAI-compatible server 配置和 runbook。
 
@@ -187,18 +218,60 @@ npm run loopgen -- apply [project] --templates all --adapters codex,claude
 
 The product goal is low-friction adoption. You can start with the built-in demo project, preview generated loops, and learn the value of loop engineering without writing to your real project.
 
+### Why loopgen?
+
+Most AI coding agents optimize for speed and run with broad permissions. loopgen makes the opposite
+trade-off the **default**, so an agent's work stays reviewable:
+
+- **Bounded iterations** (default 3) — the loop stops instead of grinding forever.
+- **Required verification** — success is defined by your real `test`/`lint`/`build` commands, not the model's say-so.
+- **Forbidden secret paths** — `.env`, `secrets/**`, and credential files are off-limits by construction.
+- **Maker/checker separation** — a separate checker reviews the diff and verification output before continuing.
+- **State-file audit log** — every attempt, outcome, and blocker is written to `.loopgen/state/*.md`.
+
+### Who should start here
+
+If you have a TypeScript/Node project with npm scripts and GitHub Actions and you already use Claude
+Code, Codex, or Cursor, loopgen auto-detects your `test`/`lint`/`build` commands and generates
+ready-to-use agent configs in under five minutes. Other roles (QA, Ops, Product, Data) have matching
+templates too.
+
+### What you get
+
+A small, inspectable set of files. For example, a generated Codex skill looks like:
+
+```markdown
+---
+name: loopgen-test-repair
+description: Diagnose failing tests in my-app, fix the underlying issue, and verify the relevant suite.
+---
+
+# Test repair
+
+## Verify
+- `npm run test`
+
+## Stop conditions
+- A verification command is missing or undefined.
+- The same failure repeats after the maximum iteration count.
+
+State file: `.loopgen/state/test-repair.md`
+Maximum iterations: 3
+```
+
 ### Quick Start
 
-#### 1. Install and build
+#### Fastest: npx (no clone required)
+
+```bash
+npx loopgen init      # opens the local wizard in demo mode — no setup, nothing written
+```
+
+#### From source (development)
 
 ```bash
 npm install
 npm run build
-```
-
-#### 2. Try the built-in demo
-
-```bash
 npm run loopgen -- scan --demo
 npm run loopgen -- preview --demo
 ```
@@ -283,8 +356,11 @@ npm run loopgen -- apply [project] --templates all --adapters codex,claude
 
 Available adapters:
 
+- `agents-md` — one `AGENTS.md` read by Claude Code, Codex, Cursor, Copilot, Gemini CLI, Aider, and more
 - `codex`
 - `claude`
+- `cursor` — `.cursor/rules/*.mdc` rules
+- `windsurf` — a `.windsurfrules` file
 - `ollama`
 - `openai-compatible`
 
@@ -313,8 +389,10 @@ The current library covers five categories:
 - `.loopgen/loopgen.loop.yaml`: intermediate loop representation.
 - `.loopgen/playbooks/*.md`: tool-agnostic loop playbooks.
 - `.loopgen/state/*.md`: attempts, outcomes and blockers.
+- `AGENTS.md`: a universal agent instruction file read by most AI coding tools.
 - `.codex/skills/*`, `.codex/automations/*`, `.codex/agents/*`: Codex-oriented outputs.
 - `.claude/skills/*`, `.claude/loops/*`, `.claude/agents/*`: Claude-oriented outputs.
+- `.cursor/rules/*.mdc` and `.windsurfrules`: Cursor and Windsurf rules.
 - `.loopgen/adapters/ollama/config.json` and `.loopgen/adapters/ollama/*.md`: Ollama runtime config and runbooks.
 - `.loopgen/adapters/openai-compatible/config.json` and `.loopgen/adapters/openai-compatible/*.md`: OpenAI-compatible runtime config and runbooks.
 

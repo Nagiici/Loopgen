@@ -53,6 +53,49 @@ describe("generateLoopProject", () => {
     expect(result.diff).toContain("makerChecker: true");
   });
 
+  test("generates portable AGENTS.md, Cursor, and Windsurf outputs", async () => {
+    const root = await tempProject({
+      "package.json": JSON.stringify({
+        name: "portable-app",
+        scripts: {
+          test: "vitest run",
+          lint: "eslint .",
+          build: "vite build"
+        }
+      }),
+      "package-lock.json": "{}",
+      "README.md": "# portable-app",
+      "src/main.ts": "export const ok = true;",
+      "src/main.test.ts": "test('ok', () => {})"
+    });
+
+    const result = await generateLoopProject({
+      projectRoot: root,
+      selectedTemplates: ["test-repair", "ci-failure-repair"],
+      adapters: ["agents-md", "cursor", "windsurf"]
+    });
+
+    const paths = result.files.map((file) => file.path);
+    expect(paths).toContain("AGENTS.md");
+    expect(paths).toContain(".cursor/rules/loopgen-test-repair.mdc");
+    expect(paths).toContain(".cursor/rules/loopgen-ci-failure-repair.mdc");
+    expect(paths).toContain(".windsurfrules");
+
+    const agents = result.files.find((file) => file.path === "AGENTS.md")?.content ?? "";
+    expect(agents).toContain("# AGENTS.md");
+    expect(agents).toContain("test-repair");
+    expect(agents).toContain("npm run test");
+    expect(agents).toContain("Do not read or modify");
+
+    const cursor = result.files.find((file) => file.path === ".cursor/rules/loopgen-test-repair.mdc")?.content ?? "";
+    expect(cursor).toContain("alwaysApply:");
+    expect(cursor).toContain("Maximum iterations: 3");
+
+    // The cross-tool adapters carry no secrets and emit no Codex/Claude files.
+    expect(agents).not.toContain("DATABASE_URL");
+    expect(paths.some((filePath) => filePath.startsWith(".codex/"))).toBe(false);
+  });
+
   test("demo mode previews recommended loops without requiring a project path", async () => {
     const result = await generateLoopProject({
       experienceMode: "demo",

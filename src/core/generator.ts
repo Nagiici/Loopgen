@@ -1,9 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { stringify } from "yaml";
+import { generateAgentsFiles } from "../adapters/agents-md.js";
 import { generateClaudeFiles } from "../adapters/claude.js";
 import { generateCodexFiles } from "../adapters/codex.js";
+import { generateCursorFiles } from "../adapters/cursor.js";
 import { generateLocalModelFiles, localModelWarnings } from "../adapters/local-model.js";
+import { generateWindsurfFiles } from "../adapters/windsurf.js";
 import { DEFAULT_ADAPTER_IDS, normalizeAdapterConfigs } from "./adapters.js";
 import { createPreviewDiff } from "./diff.js";
 import { defaultAnswers, createLoopSpec, TEMPLATE_DEFINITIONS, templateIds } from "./templates.js";
@@ -48,8 +51,11 @@ export async function generateLoopProject(options: GenerationOptions): Promise<G
       path: loop.stateFile,
       content: renderStateFile(loop.id, loop.title)
     })),
+    ...(answers.adapters.includes("agents-md") ? generateAgentsFiles(scan, loops) : []),
     ...(answers.adapters.includes("codex") ? generateCodexFiles(scan, loops) : []),
     ...(answers.adapters.includes("claude") ? generateClaudeFiles(scan, loops) : []),
+    ...(answers.adapters.includes("cursor") ? generateCursorFiles(scan, loops) : []),
+    ...(answers.adapters.includes("windsurf") ? generateWindsurfFiles(scan, loops) : []),
     ...(answers.adapters.includes("ollama")
       ? generateLocalModelFiles(scan, loops, { adapterId: "ollama", config: answers.adapterConfigs.ollama ?? {} })
       : []),
@@ -217,7 +223,10 @@ function fileSortKey(filePath: string) {
   if (filePath.startsWith(".loopgen/state/")) return `4:${filePath}`;
   if (filePath.startsWith(".codex/")) return `5:${filePath}`;
   if (filePath.startsWith(".claude/")) return `6:${filePath}`;
-  return `7:${filePath}`;
+  if (filePath === "AGENTS.md") return `7:${filePath}`;
+  if (filePath.startsWith(".cursor/")) return `8:${filePath}`;
+  if (filePath === ".windsurfrules") return `9:${filePath}`;
+  return `10:${filePath}`;
 }
 
 function unique<T>(items: T[]) {

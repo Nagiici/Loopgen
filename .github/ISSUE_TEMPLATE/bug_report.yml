@@ -1,0 +1,28 @@
+name: Bug report
+description: Report something that doesn't work as expected.
+title: "[bug] <short summary>"
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. npx loopgen init
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: loopgen version & environment
+      placeholder: "loopgen 0.1.0, Node 20, macOS"
+    validations:
+      required: true
