@@ -181,6 +181,22 @@ npm run loopgen -- run test-repair . --mode driven --adapter ollama --ollama-mod
 - 需要干净的 git 工作区(`--allow-dirty` 可跳过);`--dry-run` 只预览第一轮提议、不写文件。
 - 诚实说明:**有界 + 强制 + 验证 + 留证 —— 不是沙箱。** 模型仍会提议,loopgen 负责框住、限制、验证、留证。
 
+#### 治理 —— 把审计账本变成团队证据(`loopgen audit`)
+
+每次 `loopgen run` 都会往本仓库的、带哈希链的 `.loopgen/audit.jsonl` 追加一条。`audit` 命令族把这些账本
+变成团队级、可用于合规的证据,以及一个 CI 闸门 —— local-first、无需服务器:
+
+```bash
+npm run loopgen -- audit verify                  # 校验哈希链是否完好(防篡改)
+npm run loopgen -- audit summary                 # 单仓库:通过率、按 loop、违规数
+npm run loopgen -- audit aggregate ../repos --html gov.html --report gov.md   # 聚合多个仓库/开发者
+npm run loopgen -- audit check --require test-repair --require-no-violations --require-chain   # CI 闸门
+```
+
+`aggregate` 会在给定的文件/目录里找 `audit.jsonl`,合并成一份汇总,并可生成一个**自包含的 HTML 治理看板**
+(直接打开即可,无需服务器)和一份 markdown 报告。`check` 是**合并闸门**:当某个必需 loop 没有通过记录、
+有改动碰了禁止路径、或链断了,就以非 0 退出 —— 接进 CI 即可在「证据缺失/不足」时挡住合并。
+
 可用 adapter：
 
 - `agents-md`：通用 `AGENTS.md`，可被 Claude Code、Codex、Cursor、Copilot、Gemini CLI、Aider 等读取
@@ -435,6 +451,23 @@ audit + a proof report with the full iteration history (including every blocked 
 - Needs a clean git tree (`--allow-dirty` to override); `--dry-run` previews the first proposal without writing.
 - Honest scope: **bounded + enforced + verified + proven — not a sandbox.** The model still proposes; loopgen
   bounds, confines, verifies, and proves.
+
+#### Governance — turn the ledgers into team evidence (`loopgen audit`)
+
+Every `loopgen run` appends to a per-repo, hash-chained `.loopgen/audit.jsonl`. The `audit` commands turn
+those ledgers into team-level, compliance-ready evidence and a CI gate — local-first, no server:
+
+```bash
+npm run loopgen -- audit verify                  # prove the hash chain is intact (tamper check)
+npm run loopgen -- audit summary                 # one repo: pass rate, by loop, violations
+npm run loopgen -- audit aggregate ../repos --html gov.html --report gov.md   # roll up many repos/devs
+npm run loopgen -- audit check --require test-repair --require-no-violations --require-chain   # CI gate
+```
+
+`aggregate` scans the given files/directories for `audit.jsonl`, merges them into one rollup, and can write
+a self-contained **HTML governance dashboard** (just open it — no server) plus a markdown report. `check` is
+the **merge gate**: it exits non-zero if a required loop has no passing run, a run touched forbidden paths, or
+the chain is broken — wire it into CI to block merges on missing or insufficient proof.
 
 Available adapters:
 

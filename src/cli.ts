@@ -13,7 +13,11 @@ import { TEMPLATE_DEFINITIONS } from "./core/templates.js";
 import { startLoopgenServer } from "./server.js";
 import { DEFAULT_ADAPTER_IDS, parseAdapterIds } from "./core/adapters.js";
 import { runLoop } from "./core/runner.js";
-import type { AdapterConfigMap, AdapterId, ExperienceMode, GenerationOptions, LoopTemplateId, RunMode } from "./core/types.js";
+import { readAuditLog, verifyAuditChain } from "./core/audit.js";
+import { buildSummary, collectAuditFiles, evaluatePolicy } from "./core/governance.js";
+import { renderGovernanceHtml, renderGovernanceMarkdown } from "./core/governance-report.js";
+import { promises as fsp } from "node:fs";
+import type { AdapterConfigMap, AdapterId, AuditPolicy, ExperienceMode, GenerationOptions, GovernanceSummary, LoopTemplateId, RunMode } from "./core/types.js";
 
 const PROJECT_MANIFESTS = [
   "package.json",
@@ -225,6 +229,93 @@ program
     }
   );
 
+const audit = program.command("audit").description("Inspect, aggregate, and gate on loopgen audit logs (governance).");
+
+audit
+  .command("verify")
+  .argument("[project]", "project directory", ".")
+  .description("Verify the audit hash chain is intact (tamper check).")
+  .action(async (project: string) => {
+    const entries = await readAuditLog(path.resolve(project));
+    const chain = verifyAuditChain(entries);
+    if (chain.valid) {
+      console.log(`Audit chain valid (${entries.length} entries).`);
+    } else {
+      console.log(`Audit chain BROKEN at entry ${chain.brokenAt}.`);
+      process.exitCode = 1;
+    }
+  });
+
+audit
+  .command("summary")
+  .argument("[project]", "project directory", ".")
+  .option("--json", "print the summary as JSON")
+  .description("Summarize one repo's audit log (pass rate, by loop, violations).")
+  .action(async (project: string, options: { json?: boolean }) => {
+    const root = path.resolve(project);
+    const { summary } = await buildSummary([{ label: ".", filePath: path.join(root, ".loopgen", "audit.jsonl") }]);
+    if (options.json) console.log(JSON.stringify(summary, null, 2));
+    else printSummary(summary);
+  });
+
+audit
+  .command("aggregate")
+  .argument("<paths...>", "audit.jsonl files or directories to scan")
+  .option("--json", "print the rollup as JSON")
+  .option("--report <file>", "write a markdown governance report")
+  .option("--html <file>", "write a self-contained HTML governance dashboard")
+  .description("Aggregate many devs'/repos' audit logs into one team governance rollup.")
+  .action(async (paths: string[], options: { json?: boolean; report?: string; html?: string }) => {
+    const files = await collectAuditFiles(paths);
+    if (!files.length) {
+      console.error("No audit.jsonl files found in the given paths.");
+      process.exitCode = 1;
+      return;
+    }
+    const { summary } = await buildSummary(files.map((file) => ({ label: relLabel(file), filePath: file })));
+    if (options.report) {
+      await fsp.writeFile(options.report, renderGovernanceMarkdown(summary), "utf8");
+      console.log(`Wrote ${options.report}`);
+    }
+    if (options.html) {
+      await fsp.writeFile(options.html, renderGovernanceHtml(summary), "utf8");
+      console.log(`Wrote ${options.html}`);
+    }
+    if (options.json) console.log(JSON.stringify(summary, null, 2));
+    else printSummary(summary);
+  });
+
+audit
+  .command("check")
+  .argument("[project]", "project directory", ".")
+  .option("--require <loops>", "comma-separated loop ids that must have a passing run")
+  .option("--since <iso>", "only consider runs at/after this ISO timestamp")
+  .option("--require-no-violations", "fail if any run modified forbidden paths")
+  .option("--require-chain", "fail if the audit chain is broken")
+  .description("Gate CI/merge on the audit log; exits 1 if the policy is not satisfied.")
+  .action(
+    async (
+      project: string,
+      options: { require?: string; since?: string; requireNoViolations?: boolean; requireChain?: boolean }
+    ) => {
+      const entries = await readAuditLog(path.resolve(project));
+      const policy: AuditPolicy = {
+        requireLoops: options.require ? options.require.split(",").map((item) => item.trim()).filter(Boolean) : undefined,
+        since: options.since,
+        requireNoViolations: options.requireNoViolations,
+        requireChainValid: options.requireChain
+      };
+      const result = evaluatePolicy(entries, policy);
+      if (result.ok) {
+        console.log(`Policy satisfied (${result.checked} run(s) checked).`);
+      } else {
+        console.log("Policy FAILED:");
+        for (const failure of result.failures) console.log(`  - ${failure}`);
+        process.exitCode = 1;
+      }
+    }
+  );
+
 program.parseAsync(process.argv).catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
@@ -316,6 +407,23 @@ function printRunResult(result: Awaited<ReturnType<typeof runLoop>>) {
   console.log(`  files changed: ${changed}`);
   if (result.reportPath) console.log(`  report: ${result.reportPath}`);
   if (!result.dryRun) console.log(`  audit: .loopgen/audit.jsonl (${result.entry.hash.slice(0, 12)}…)`);
+}
+
+function printSummary(summary: GovernanceSummary) {
+  console.log(`Runs: ${summary.total} (${summary.passed} pass / ${summary.failed} fail) — ${Math.round(summary.passRate * 100)}%`);
+  console.log(`Modes: referee ${summary.byMode.referee}, driven ${summary.byMode.driven}`);
+  console.log(`Chain: ${summary.chain.valid ? "valid" : `BROKEN at ${summary.chain.brokenAt}`}`);
+  console.log(`Forbidden violations: ${summary.forbiddenViolationRuns} run(s); blocked attempts (prevented): ${summary.blockedAttempts}`);
+  for (const [loop, stat] of Object.entries(summary.byLoop).sort((a, b) => b[1].total - a[1].total)) {
+    console.log(`  ${loop}: ${stat.passed}/${stat.total} passed`);
+  }
+  if (summary.sources.length > 1) {
+    console.log(`Sources: ${summary.sources.length} (${summary.sources.filter((source) => source.chainValid).length} with a valid chain)`);
+  }
+}
+
+function relLabel(file: string): string {
+  return path.relative(process.cwd(), file) || file;
 }
 
 function formatCommands(commands: object) {

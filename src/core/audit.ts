@@ -23,18 +23,18 @@ export function hashEntry(input: AuditEntryInput, prevHash: string | null): stri
   return createHash("sha256").update(canonicalize({ ...input, prevHash })).digest("hex");
 }
 
-async function readRaw(projectRoot: string): Promise<string | undefined> {
-  return fs.readFile(path.join(projectRoot, AUDIT_FILE), "utf8").catch(() => undefined);
-}
-
-export async function readAuditLog(projectRoot: string): Promise<AuditEntry[]> {
-  const raw = await readRaw(projectRoot);
+export async function readAuditFile(filePath: string): Promise<AuditEntry[]> {
+  const raw = await fs.readFile(filePath, "utf8").catch(() => undefined);
   if (!raw) return [];
   return raw
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => JSON.parse(line) as AuditEntry);
+}
+
+export async function readAuditLog(projectRoot: string): Promise<AuditEntry[]> {
+  return readAuditFile(path.join(projectRoot, AUDIT_FILE));
 }
 
 export async function appendAuditEntry(projectRoot: string, input: AuditEntryInput): Promise<AuditEntry> {

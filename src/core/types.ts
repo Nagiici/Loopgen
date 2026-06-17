@@ -328,3 +328,34 @@ export interface ModelClientConfig {
   apiKeyEnv?: string;
   timeoutMs: number;
 }
+
+// ---------- governance (`loopgen audit`) ----------
+
+export interface GovernanceSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  passRate: number; // 0..1
+  byLoop: Record<string, { total: number; passed: number }>;
+  byMode: { referee: number; driven: number };
+  byActor: Record<string, { total: number; passed: number }>;
+  blockedAttempts: number;
+  forbiddenViolationRuns: number;
+  firstAt?: string;
+  lastAt?: string;
+  chain: { valid: boolean; brokenAt?: number };
+  sources: Array<{ label: string; entries: number; chainValid: boolean }>;
+}
+
+export interface AuditPolicy {
+  requireLoops?: string[];
+  since?: string;
+  requireNoViolations?: boolean;
+  requireChainValid?: boolean;
+}
+
+export interface PolicyResult {
+  ok: boolean;
+  failures: string[];
+  checked: number;
+}
