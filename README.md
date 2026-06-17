@@ -4,25 +4,28 @@
 [![CI](https://github.com/Nagiici/Loopgen/actions/workflows/ci.yml/badge.svg)](https://github.com/Nagiici/Loopgen/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**AI coding assistants can make unlimited changes. loopgen generates the guardrails.**
+**Run your AI's coding loop — and prove its work actually passed.**
 
-loopgen scans your project and generates bounded, inspectable **agent loop** configs — so your own
-CI, tests, and lint verify every iteration before it goes further. Works with Claude Code, Codex,
-Cursor, and local models (Ollama, LM Studio, llama.cpp).
+Any model can *write* an `AGENTS.md`. loopgen does the part a stateless model can't: it **runs** a bounded
+loop, executes your real `test` / `lint` / `build` and **gates success on the exit codes**, **enforces**
+forbidden-path and iteration limits, and writes a **tamper-evident, hash-chained audit log + proof report**.
+Works with Claude Code, Codex, Cursor, and local models (Ollama, LM Studio, llama.cpp).
 
 ```bash
-npx loopgen init      # opens a local wizard in demo mode — no setup, nothing written to your project
+npx loopgen init             # scan your repo + pick bounded-loop templates (local wizard, nothing written)
+npx loopgen run test-repair  # run the loop, verify it, and leave proof it passed (exits 0/1 for CI)
 ```
 
-> **What's a "loop"?** A bounded, verifiable cycle: make the smallest change → run your verification
-> commands → log what happened to a state file → stop or repeat, up to a hard iteration limit.
+- ✅ **Prove the work** — `loopgen run` executes a loop, gates on your *real* verification commands, and
+  writes an auditable record a chatbot cannot. *Referee* mode verifies any agent's change; *driven* mode
+  drives a **local model** itself and **blocks forbidden writes before they land**.
+- 🧾 **Govern the agents** — `loopgen audit` rolls up every dev's hash-chained ledger into a report + a
+  self-contained HTML dashboard, and a CI **merge gate** (`audit check`, also a GitHub Action) blocks PRs
+  that lack passing, untampered proof.
+- 🏠 **Local-first & open source (MIT)** — no telemetry, no cloud; drives only your local models; API keys
+  are referenced by env-var name only.
 
-- 🛡️ **Safety by default** — bounded iterations (default 3), required verification, forbidden secret
-  paths, maker/checker separation, and a state-file audit log.
-- 🔌 **Tool-agnostic** — one scan generates config for Codex, Claude, Cursor, and local runtimes.
-- 🏠 **Local-first** — no telemetry, no cloud calls; API keys are referenced by env-var name only.
-
-<!-- TODO: add a 15s demo GIF of the wizard (scan → preview diff → apply) here. -->
+<!-- TODO: add a 12s asciinema of `loopgen run` going PASS/FAIL with the proof report. -->
 
 📖 中文说明见 [中文](#中文) · English documentation [below](#english).
 
@@ -32,15 +35,24 @@ npx loopgen init      # opens a local wizard in demo mode — no setup, nothing 
 
 ### 项目简介
 
-`loopgen` 会扫描你的项目，推断语言、包管理器、测试/构建命令和 CI 配置，然后生成一组可审查的 loop 文件：
+**跑你的 AI 编码循环 —— 并证明它的工作真的通过了。** 任何模型都能*写*一个 `AGENTS.md`;loopgen 做的是
+模型本身做不到的那部分:**执行**一个有界循环,跑你真实的 `test` / `lint` / `build` 并**按退出码判定通过/
+失败**,**强制**禁止路径与迭代上限,并写下一条**带哈希链、防篡改的审计 + 证明报告**。支持 Claude Code、
+Codex、Cursor 和本地模型(Ollama、LM Studio、llama.cpp)。
 
-- 通用 `.loopgen/playbooks/*.md`：不依赖任何特定 AI 工具，适合先理解 loop engineering 的工作方式。
-- Codex 配置：`.codex/skills/*`、`.codex/automations/*`、checker agent。
-- Claude 配置：`.claude/skills/*`、`.claude/loops/*`、checker notes。
-- 本地/开源模型适配器：Ollama 与 OpenAI-compatible server（例如 LM Studio、llama.cpp）的配置和 runbook。
-- 状态记录：`.loopgen/state/*.md`，用于记录每次循环尝试、结果和阻塞点。
+```bash
+npx loopgen init             # 扫描仓库 + 选择有界循环模板(本地向导,不写文件)
+npx loopgen run test-repair  # 跑这个循环、验证它,并留下「通过」的证据(退出码 0/1,可接 CI)
+```
 
-核心目标是降低使用门槛：你可以先用内置 demo 项目预览效果，不需要接入真实项目，也不会写入真实项目文件。
+- ✅ **证明工作** —— `loopgen run` 执行循环、按你的真实验证命令判定、写下 chatbot 做不到的可审计记录。
+  *referee* 模式验证任意 agent 的改动;*driven* 模式自己驱动**本地模型**,并在**落盘前拦截禁止路径写入**。
+- 🧾 **治理 agent** —— `loopgen audit` 把每个开发者的哈希链账本聚合成报告 + 自包含 HTML 看板,CI **合并闸门**
+  (`audit check`,也有现成 GitHub Action)挡住「缺少通过/未被篡改证据」的 PR。
+- 🏠 **local-first & 开源(MIT)** —— 无遥测、无云调用;只驱动你的本地模型;API key 仅按环境变量名引用。
+
+> 仍可先用内置 demo 预览:`loopgen init` 不需要真实项目、也不会写入文件。生成的可审查文件包括
+> `.loopgen/playbooks/*.md`、Codex/Claude/Cursor/AGENTS.md 适配输出、`.loopgen/state/*.md` 等。
 
 ### 适合谁先尝试
 
@@ -272,7 +284,9 @@ npm run loopgen -- audit check --require test-repair --require-no-violations --r
 
 ### Overview
 
-`loopgen` scans a project, infers the language, package manager, verification commands and CI setup, then generates inspectable loop engineering files:
+`loopgen` is a **verified runner for AI coding loops**: it scans a project, generates inspectable bounded-loop
+configs, then **runs** them — executing your real verification, enforcing guardrails, and writing
+tamper-evident proof. The generated, inspectable files (the input to `loopgen run`):
 
 - Tool-agnostic `.loopgen/playbooks/*.md` files for anyone who wants to understand the loop before using an agent tool.
 - Codex outputs: `.codex/skills/*`, `.codex/automations/*`, and checker agents.
