@@ -169,12 +169,35 @@ program
   .option("--json", "print the run result as JSON")
   .option("--dry-run", "run checks without writing audit, report, or state")
   .option("--no-report", "do not write the markdown proof report")
+  .option("--adapter <id>", "driven mode: ollama | openai-compatible")
+  .option("--max-iterations <n>", "driven mode: override the loop's max iterations")
+  .option("--allow-dirty", "driven mode: allow running with a dirty working tree")
+  .option("--ollama-model <model>", "driven mode: Ollama model name")
+  .option("--ollama-base-url <url>", "driven mode: Ollama base URL")
+  .option("--openai-compatible-model <model>", "driven mode: OpenAI-compatible model name")
+  .option("--openai-compatible-base-url <url>", "driven mode: OpenAI-compatible base URL")
+  .option("--openai-compatible-api-key-env <name>", "driven mode: env var name for the API key")
   .description("Run a loop's verification against the working tree and write a tamper-evident proof.")
   .action(
     async (
       loop: string | undefined,
       project: string,
-      options: { mode?: string; base?: string; loopsFile?: string; json?: boolean; dryRun?: boolean; report?: boolean }
+      options: {
+        mode?: string;
+        base?: string;
+        loopsFile?: string;
+        json?: boolean;
+        dryRun?: boolean;
+        report?: boolean;
+        adapter?: string;
+        maxIterations?: string;
+        allowDirty?: boolean;
+        ollamaModel?: string;
+        ollamaBaseUrl?: string;
+        openaiCompatibleModel?: string;
+        openaiCompatibleBaseUrl?: string;
+        openaiCompatibleApiKeyEnv?: string;
+      }
     ) => {
       const result = await runLoop({
         projectRoot: path.resolve(project),
@@ -183,7 +206,15 @@ program
         base: options.base,
         loopsFile: options.loopsFile,
         dryRun: options.dryRun,
-        writeReport: options.report
+        writeReport: options.report,
+        allowDirty: options.allowDirty,
+        adapter: options.adapter === "openai-compatible" ? "openai-compatible" : options.adapter === "ollama" ? "ollama" : undefined,
+        maxIterations: options.maxIterations ? Number(options.maxIterations) : undefined,
+        ollamaModel: options.ollamaModel,
+        ollamaBaseUrl: options.ollamaBaseUrl,
+        openaiCompatibleModel: options.openaiCompatibleModel,
+        openaiCompatibleBaseUrl: options.openaiCompatibleBaseUrl,
+        openaiCompatibleApiKeyEnv: options.openaiCompatibleApiKeyEnv
       });
       if (options.json) {
         console.log(JSON.stringify(result, null, 2));
@@ -267,6 +298,10 @@ function printGenerationSummary(result: Awaited<ReturnType<typeof generateLoopPr
 
 function printRunResult(result: Awaited<ReturnType<typeof runLoop>>) {
   console.log(`${result.passed ? "PASS" : "FAIL"} — loop ${result.loop.id} (${result.entry.mode}${result.dryRun ? ", dry-run" : ""})`);
+  if (result.entry.driven) {
+    const blocked = result.entry.driven.attempts.reduce((sum, attempt) => sum + attempt.blocked.length, 0);
+    console.log(`  driven: ${result.entry.iterations} iteration(s), stop=${result.entry.driven.stopReason}, blocked=${blocked}`);
+  }
   for (const command of result.verification.results) {
     const mark = command.timedOut ? "timeout" : command.exitCode === 0 ? "ok" : `exit ${command.exitCode}`;
     console.log(`  verify: ${command.command} — ${mark}`);

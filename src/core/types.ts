@@ -209,6 +209,11 @@ export interface AuditEntry {
   };
   iterations: number;
   passed: boolean;
+  driven?: {
+    stopReason: DrivenStopReason;
+    model: { adapter: string; modelName: string; baseUrl: string };
+    attempts: IterationSummary[];
+  };
   prevHash: string | null;
   hash: string;
 }
@@ -223,6 +228,16 @@ export interface RunOptions {
   base?: string;
   dryRun?: boolean;
   writeReport?: boolean;
+  // driven mode
+  maxIterations?: number;
+  allowDirty?: boolean;
+  adapter?: "ollama" | "openai-compatible";
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
+  openaiCompatibleModel?: string;
+  openaiCompatibleBaseUrl?: string;
+  openaiCompatibleApiKeyEnv?: string;
+  modelClient?: ModelClient; // dependency-injection seam for tests; never set by the CLI
 }
 
 export interface RunResult {
@@ -233,4 +248,83 @@ export interface RunResult {
   forbidden: ForbiddenPathResult;
   reportPath?: string;
   dryRun: boolean;
+  iterationLogs?: IterationLog[];
+}
+
+// ---------- driven mode (`loopgen run --mode driven`) ----------
+
+export type DrivenActionType = "write_file" | "delete_file" | "run_command" | "finish";
+
+export interface WriteFileAction {
+  type: "write_file";
+  path: string;
+  content: string;
+}
+export interface DeleteFileAction {
+  type: "delete_file";
+  path: string;
+}
+export interface RunCommandAction {
+  type: "run_command";
+  command: string;
+}
+export interface FinishAction {
+  type: "finish";
+  summary: string;
+}
+export type DrivenAction = WriteFileAction | DeleteFileAction | RunCommandAction | FinishAction;
+
+export interface ModelTurn {
+  reasoning: string;
+  actions: DrivenAction[];
+}
+
+export type BlockReason = "forbidden-path" | "path-escape" | "command-not-allowed" | "limit-exceeded";
+
+export interface BlockedAction {
+  type: DrivenActionType;
+  target: string;
+  reason: BlockReason;
+  pattern?: string;
+}
+
+export interface AppliedAction {
+  type: DrivenActionType;
+  target: string;
+}
+
+export type DrivenStopReason = "verified" | "finish" | "max-iterations" | "timeout" | "repeated-failure" | "forbidden-stop";
+
+export interface IterationSummary {
+  iteration: number;
+  actions: { write: number; delete: number; run: number; finish: number };
+  blocked: Array<{ type: DrivenActionType; reason: BlockReason; pattern?: string }>;
+  verificationPassed: boolean;
+  parseError?: string;
+}
+
+export interface IterationLog {
+  iteration: number;
+  reasoning: string;
+  applied: AppliedAction[];
+  blocked: BlockedAction[];
+  parseError?: string;
+  verification?: VerificationResult;
+}
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ModelClient {
+  chat(messages: ChatMessage[]): Promise<string>;
+}
+
+export interface ModelClientConfig {
+  adapterId: "ollama" | "openai-compatible";
+  baseUrl: string;
+  model: string;
+  apiKeyEnv?: string;
+  timeoutMs: number;
 }

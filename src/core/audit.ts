@@ -6,12 +6,16 @@ import type { AuditEntry, AuditEntryInput } from "./types.js";
 export const AUDIT_FILE = ".loopgen/audit.jsonl";
 
 // Deterministic JSON: object keys sorted recursively so the hash is stable across runs/machines.
+// undefined-valued keys are skipped (matching JSON.stringify) so the in-memory hash equals the hash
+// recomputed from the JSON-round-tripped entry — otherwise dropped keys would break the chain.
 function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
-  const entries = Object.keys(value as Record<string, unknown>)
+  const record = value as Record<string, unknown>;
+  const entries = Object.keys(record)
+    .filter((key) => record[key] !== undefined)
     .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalize((value as Record<string, unknown>)[key])}`);
+    .map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`);
   return `{${entries.join(",")}}`;
 }
 

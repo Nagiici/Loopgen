@@ -160,7 +160,26 @@ npm run loopgen -- run test-repair .
 
 - `--dry-run`:只检查、不写文件。
 - `--base <ref>`:指定对比的 git ref(默认 `HEAD`)。
-- 说明:v1 是**事后检测,而非沙箱阻断**——它证明改动通过了你的真实验证、且没有改动禁止路径。
+- 说明:referee 模式是**事后检测,而非沙箱阻断**——它证明改动通过了你的真实验证、且没有改动禁止路径。
+
+#### driven 模式 —— 让 loopgen 自己跑这个 loop（`--mode driven`）
+
+driven 模式从「事后检测」升级为「过程阻断」:loopgen 驱动一个**本地模型**(Ollama 或任意
+OpenAI-compatible 服务)跑有界的 agent 循环,并**在落盘前强制护栏** —— 写禁止路径会在落盘前被拦,
+不在白名单里的命令不会执行,超过迭代/时间上限就停。
+
+```bash
+npm run loopgen -- run test-repair . --mode driven --adapter ollama --ollama-model qwen2.5-coder
+```
+
+每轮模型给出一小批 JSON 动作(`write_file` / `run_command` / `finish`);loopgen 逐条校验
+(限制在仓库内、拦禁止路径、命令白名单、大小上限),应用允许的动作,跑你的 `verification.commands`,
+再把结果喂回去 —— 直到验证通过、模型 finish、或触达 `maxIterations` / 超时。它写入**同一套**带哈希链的
+审计 + 一份含完整迭代历史(包括每次被拦动作)的证明报告。
+
+- local-first:只调用你配置的本地/自托管模型;API key 只按环境变量名读取,绝不记录或写入文件。
+- 需要干净的 git 工作区(`--allow-dirty` 可跳过);`--dry-run` 只预览第一轮提议、不写文件。
+- 诚实说明:**有界 + 强制 + 验证 + 留证 —— 不是沙箱。** 模型仍会提议,loopgen 负责框住、限制、验证、留证。
 
 可用 adapter：
 
@@ -391,8 +410,31 @@ in `.loopgen/reports/*.md`. The process exits `0` on pass and `1` on fail, so it
 
 - `--dry-run` — run the checks, write nothing.
 - `--base <ref>` — git ref to diff against (default `HEAD`).
-- Scope: v1 is **detection, not a sandbox** — it proves the change passed your real verification and didn't
-  modify forbidden paths; it does not block reads or out-of-tree writes.
+- Scope: referee mode is **detection, not a sandbox** — it proves the change passed your real verification
+  and didn't modify forbidden paths; it does not block reads or out-of-tree writes.
+
+#### Driven mode — loopgen runs the loop (`--mode driven`)
+
+Driven mode goes from *detection* to **prevention**: loopgen drives a **local model** (Ollama or any
+OpenAI-compatible server) through a bounded agentic loop and **enforces guardrails at apply time** — a
+forbidden-path write is blocked *before it lands*, a non-allowlisted command is never run, and the loop
+stops at the iteration/time limit.
+
+```bash
+npm run loopgen -- run test-repair . --mode driven --adapter ollama --ollama-model qwen2.5-coder
+```
+
+Each iteration the model proposes a small JSON action batch (`write_file` / `run_command` / `finish`);
+loopgen validates every action (root-confined, forbidden paths blocked, command allowlist, size caps),
+applies the allowed ones, runs your `verification.commands`, and feeds the result back — until verification
+passes, the model finishes, or it hits `maxIterations` / the timeout. It writes the **same** hash-chained
+audit + a proof report with the full iteration history (including every blocked attempt).
+
+- Local-first: only your configured local/self-hosted model is called; API keys are read by env-var name
+  only and never logged or stored.
+- Needs a clean git tree (`--allow-dirty` to override); `--dry-run` previews the first proposal without writing.
+- Honest scope: **bounded + enforced + verified + proven — not a sandbox.** The model still proposes; loopgen
+  bounds, confines, verifies, and proves.
 
 Available adapters:
 

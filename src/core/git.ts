@@ -38,6 +38,18 @@ export async function isClean(root: string): Promise<boolean> {
   return stdout.trim().length === 0;
 }
 
+// Changed paths from `git status --porcelain`, excluding loopgen's own output (.loopgen/).
+// Used as the driven-mode precondition so a prior `loopgen apply` doesn't count as a dirty tree.
+export async function dirtyPathsOutsideLoopgen(root: string): Promise<string[]> {
+  const { stdout } = await git(root, ["status", "--porcelain"]);
+  return stdout
+    .split("\n")
+    .map((line) => line.slice(3).trim())
+    .map((entry) => (entry.includes(" -> ") ? entry.split(" -> ")[1].trim() : entry))
+    .filter(Boolean)
+    .filter((file) => !file.replace(/\\/g, "/").startsWith(".loopgen/"));
+}
+
 export interface ChangedFiles {
   tracked: string[];
   untracked: string[];

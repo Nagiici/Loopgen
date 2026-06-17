@@ -1,6 +1,11 @@
-import type { AuditEntry, LoopSpec, VerificationResult } from "./types.js";
+import type { AuditEntry, IterationLog, LoopSpec, VerificationResult } from "./types.js";
 
-export function renderProofReport(loop: LoopSpec, entry: AuditEntry, verification: VerificationResult): string {
+export function renderProofReport(
+  loop: LoopSpec,
+  entry: AuditEntry,
+  verification: VerificationResult,
+  iterationLogs?: IterationLog[]
+): string {
   const banner = entry.passed ? "✅ PASS" : "❌ FAIL";
   const changed = [...entry.changedFiles.tracked, ...entry.changedFiles.untracked];
 
@@ -53,11 +58,38 @@ ${verification.warnings.length ? `\n> Warnings:\n${verification.warnings.map((wa
 ## Forbidden paths — ${entry.forbidden.ok ? "clean" : "VIOLATION"}
 
 ${forbiddenSection}
-
+${entry.driven && iterationLogs ? `\n${renderIterationHistory(iterationLogs)}` : ""}
 ---
 
-> Scope: this is **detection, not prevention**. loopgen ran the verification commands above and diffed the
-> working tree after the work session; it does not sandbox the agent or block reads. The audit entry is
-> hash-chained in \`.loopgen/audit.jsonl\` (tamper-evident against in-place edits).
+${scopeFooter(entry)}
 `;
+}
+
+function renderIterationHistory(iterationLogs: IterationLog[]): string {
+  const blocks = iterationLogs.map((log) => {
+    const applied = log.applied.length ? log.applied.map((action) => `${action.type} \`${action.target}\``).join(", ") : "(none)";
+    const blocked = log.blocked.length
+      ? log.blocked.map((block) => `${block.type} \`${block.target}\` — **blocked** (${block.reason}${block.pattern ? ` \`${block.pattern}\`` : ""})`).join("\n  - ")
+      : "(none)";
+    const verify = log.parseError
+      ? `parse error: ${log.parseError}`
+      : log.verification
+        ? log.verification.passed
+          ? "verification passed"
+          : "verification failed"
+        : "no verification";
+    return `### Iteration ${log.iteration}
+
+${log.reasoning ? `> ${log.reasoning}\n` : ""}- Applied: ${applied}
+- Blocked: ${blocked}
+- ${verify}`;
+  });
+  return `## Iteration history\n\n${blocks.join("\n\n")}\n`;
+}
+
+function scopeFooter(entry: AuditEntry): string {
+  if (entry.driven) {
+    return `> Scope: **bounded + enforced**. loopgen drove a local model (${entry.driven.model.adapter} · ${entry.driven.model.modelName}), blocked forbidden writes and non-allowlisted commands **at apply time**, bounded iterations, and verified each one (stop reason: ${entry.driven.stopReason}). The model still proposes actions — this is enforcement, not a sandbox. Audit is hash-chained in \`.loopgen/audit.jsonl\`.`;
+  }
+  return `> Scope: this is **detection, not prevention**. loopgen ran the verification commands above and diffed the working tree after the work session; it does not sandbox the agent or block reads. The audit entry is hash-chained in \`.loopgen/audit.jsonl\` (tamper-evident against in-place edits).`;
 }

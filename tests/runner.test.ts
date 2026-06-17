@@ -7,6 +7,14 @@ import { stringify } from "yaml";
 import { afterEach, describe, expect, test } from "vitest";
 import { readAuditLog, verifyAuditChain } from "../src/core/audit.js";
 import { runLoop } from "../src/core/runner.js";
+import type { ModelClient } from "../src/core/types.js";
+
+function fakeModel(responses: string[]): ModelClient {
+  let index = 0;
+  return { chat: async () => responses[Math.min(index++, responses.length - 1)] };
+}
+const writeThenFinish = (file: string, content = "ok") =>
+  JSON.stringify({ reasoning: "fix it", actions: [{ type: "write_file", path: file, content }, { type: "finish", summary: "done" }] });
 
 const execFileAsync = promisify(execFile);
 const roots: string[] = [];
@@ -120,3 +128,97 @@ describe("runLoop (referee mode)", () => {
     await expect(runLoop({ projectRoot: root })).rejects.toThrow(/git repository/);
   });
 });
+
+const EXISTS = (file: string) => `node -e "process.exit(require('fs').existsSync('${file}')?0:1)"`;
+
+describe("runLoop (driven mode)", () => {
+  test("model writes a file → verification passes → passed, audit appended", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    const result = await runLoop({ projectRoot: root, mode: "driven", modelClient: fakeModel([writeThenFinish("fix.txt")]) });
+    expect(result.passed).toBe(true);
+    expect(result.entry.mode).toBe("driven");
+    expect(["verified", "finish"]).toContain(result.entry.driven?.stopReason);
+    expect(result.entry.iterations).toBe(1);
+    const audit = await readAuditLog(root);
+    expect(audit).toHaveLength(1);
+    expect(verifyAuditChain(audit).valid).toBe(true);
+  });
+
+  test("model proposes a forbidden .env write → blocked, file absent", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    const env = JSON.stringify({ reasoning: "sneak", actions: [{ type: "write_file", path: ".env", content: "SECRET=1" }] });
+    const result = await runLoop({ projectRoot: root, mode: "driven", maxIterations: 2, modelClient: fakeModel([env, env]) });
+    expect(result.passed).toBe(false);
+    await expect(fs.access(path.join(root, ".env"))).rejects.toThrow();
+    const blocked = result.entry.driven?.attempts.flatMap((attempt) => attempt.blocked) ?? [];
+    expect(blocked.some((block) => block.reason === "forbidden-path")).toBe(true);
+  });
+
+  test("never fixes → stops at max iterations", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    const responses = [writeThenNoFinish("a.txt"), writeThenNoFinish("b.txt"), writeThenNoFinish("c.txt")];
+    const result = await runLoop({ projectRoot: root, mode: "driven", maxIterations: 3, modelClient: fakeModel(responses) });
+    expect(result.passed).toBe(false);
+    expect(result.entry.iterations).toBe(3);
+    expect(result.entry.driven?.stopReason).toBe("max-iterations");
+  });
+
+  test("repeated identical failure stops early", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    const same = writeThenNoFinish("same.txt");
+    const result = await runLoop({ projectRoot: root, mode: "driven", maxIterations: 5, modelClient: fakeModel([same, same, same]) });
+    expect(result.entry.driven?.stopReason).toBe("repeated-failure");
+    expect(result.entry.iterations).toBe(2);
+  });
+
+  test("malformed JSON burns an iteration then recovers", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    const result = await runLoop({
+      projectRoot: root,
+      mode: "driven",
+      maxIterations: 3,
+      modelClient: fakeModel(["not json at all", writeThenFinish("fix.txt")])
+    });
+    expect(result.passed).toBe(true);
+    expect(result.entry.iterations).toBe(2);
+    expect(result.entry.driven?.attempts[0].parseError).toBeDefined();
+  });
+
+  test("--dry-run writes nothing", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    await runLoop({ projectRoot: root, mode: "driven", dryRun: true, modelClient: fakeModel([writeThenFinish("fix.txt")]) });
+    await expect(fs.access(path.join(root, "fix.txt"))).rejects.toThrow();
+    await expect(fs.access(path.join(root, ".loopgen/audit.jsonl"))).rejects.toThrow();
+  });
+
+  test("dirty tree is rejected without --allow-dirty", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml([EXISTS("fix.txt")]));
+    await fs.writeFile(path.join(root, "README.md"), "# changed, uncommitted\n");
+    await expect(
+      runLoop({ projectRoot: root, mode: "driven", modelClient: fakeModel([writeThenFinish("fix.txt")]) })
+    ).rejects.toThrow(/dirty/);
+  });
+
+  test("referee + driven runs share one valid audit chain", async () => {
+    const root = await gitRepo();
+    await writeLoopFile(root, loopYaml(['node -e "process.exit(0)"']));
+    await runLoop({ projectRoot: root });
+    await runLoop({ projectRoot: root, mode: "driven", modelClient: fakeModel([writeThenFinish("fix.txt")]) });
+    const audit = await readAuditLog(root);
+    expect(audit).toHaveLength(2);
+    expect(audit[0].mode).toBe("referee");
+    expect(audit[1].mode).toBe("driven");
+    expect(verifyAuditChain(audit).valid).toBe(true);
+  });
+});
+
+function writeThenNoFinish(file: string): string {
+  return JSON.stringify({ reasoning: "try", actions: [{ type: "write_file", path: file, content: "noop" }] });
+}
