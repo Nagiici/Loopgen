@@ -29,7 +29,16 @@ npx loopgen run test-repair  # run + verify the loop; leave tamper-evident evide
 - 🏠 **Local-first & open source (MIT)** — no telemetry, no cloud; drives only your local models; API keys
   are referenced by env-var name only.
 
-![loopgen run — execute a loop, verify it, and prove it passed (or fail on a broken test / forbidden secret)](https://raw.githubusercontent.com/Nagiici/Loopgen/main/docs/demo.gif)
+> **Is loopgen for you? (honest)** If you just want to stop broken or secret-leaking code from landing, you
+> probably **don't need loopgen** — use [husky](https://typicode.github.io/husky/) (a local git hook) or, better,
+> **CI + branch-protection required status checks** (server-side, free, can't be skipped with `--no-verify`).
+> loopgen earns its place only when the **proof has to leave the repo and be trusted by someone else** — an
+> auditor, a customer, another team — *independent of which agent or vendor wrote the code*. That's the one thing
+> CI and husky don't leave behind: a portable, vendor-neutral, tamper-evident (and, in CI, Sigstore-signed)
+> **record** that the change passed. Honest status: solo-maintained and early — verification + signing work
+> today; there is no hosted team dashboard (the local `audit aggregate --html` is the stand-in).
+
+![loopgen run — execute a loop, verify it, and leave evidence it passed (or fail on a broken test / forbidden secret)](https://raw.githubusercontent.com/Nagiici/Loopgen/main/docs/demo.gif)
 
 📖 中文说明见 [中文](#中文) · English documentation [below](#english).
 
@@ -57,6 +66,13 @@ npx loopgen run test-repair  # 跑这个循环、验证它,并留下「通过」
 - 🧾 **治理 agent** —— `loopgen audit` 把每个开发者的哈希链账本聚合成报告 + 自包含 HTML 看板,CI **合并闸门**
   (`audit check`,也有现成 GitHub Action)挡住「缺少通过/未被篡改、以及可选未签名证明」的 PR。
 - 🏠 **local-first & 开源(MIT)** —— 无遥测、无云调用;只驱动你的本地模型;API key 仅按环境变量名引用。
+
+> **loopgen 适合你吗?(诚实版)** 如果你只是想**别让坏代码 / 带密钥的代码进来**,大概**用不上 loopgen**
+> —— 用 [husky](https://typicode.github.io/husky/)(本地 git 钩子),或者更好的 **CI + 分支保护 required
+> checks**(服务端、免费、`--no-verify` 跳不掉)。loopgen 只有在**「证明必须离开这个仓库、被别人信任」**时才
+> 值得用 —— 递给审计 / 客户 / 另一个团队,且**与哪家 agent / 厂商无关**。这正是 CI 和 husky 不会留下的:一份
+> 可携带、厂商中立、防篡改(在 CI 里还经 Sigstore 签名)的**记录**,证明这次改动通过了。诚实现状:solo 维护、
+> 早期 —— 验证 + 签名今天能用,但**没有托管的团队看板**(本地 `audit aggregate --html` 是替代)。
 
 > 仍可先用内置 demo 预览:`loopgen init` 不需要真实项目、也不会写入文件。生成的可审查文件包括
 > `.loopgen/playbooks/*.md`、Codex/Claude/Cursor/AGENTS.md 适配输出、`.loopgen/state/*.md` 等。
